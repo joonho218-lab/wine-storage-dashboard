@@ -6,7 +6,7 @@ import {
   ExternalLink, LayoutGrid, Table, Plus, Minus, 
   Grid3X3, History, RotateCcw, X, Camera, RefreshCw,
   ChevronDown, ChevronUp, PlusCircle, Image as ImageIcon, Trash2,
-  ZoomIn
+  ZoomIn, Edit3, MapPin
 } from 'lucide-react';
 
 const COUNTRY_INFO = {
@@ -25,6 +25,7 @@ const COMMON_RACKS = [
   '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
 ];
 
+// 프리미엄/부르고뉴/보르도/이탈리아 대폭 보강 영문 변환 엔진
 function getWineEnglishName(koreanName) {
   if (!koreanName) return '';
   let str = koreanName.trim();
@@ -33,6 +34,22 @@ function getWineEnglishName(koreanName) {
   if (matchEn) return matchEn[1].trim();
 
   const EXACT_MAP = {
+    '부샤 슈발리에 몽라쉐': 'Bouchard Père & Fils Chevalier-Montrachet Grand Cru',
+    '슈발리에 몽라쉐 레스 푸스랠스': 'Chevalier-Montrachet Grand Cru Les Demoiselles',
+    '슈발리에 몽라쉐 그랜드 크루': 'Chevalier-Montrachet Grand Cru',
+    '슈발리에 몽라쉐': 'Chevalier-Montrachet Grand Cru',
+    '바타르 몽라쉐': 'Bâtard-Montrachet Grand Cru',
+    '비앵브뉘 바타르 몽라쉐': 'Bienvenues-Bâtard-Montrachet Grand Cru',
+    '크리오 바타르 몽라쉐': 'Criots-Bâtard-Montrachet Grand Cru',
+    '몽라쉐': 'Le Montrachet Grand Cru',
+    '로마네 꽁티': 'Domaine de la Romanée-Conti Romanée-Conti',
+    '라 타슈': 'Domaine de la Romanée-Conti La Tâche',
+    '리쉬부르': 'Richebourg Grand Cru',
+    '에셰조': 'Échezeaux Grand Cru',
+    '로마네 생 비방': 'Romanée-Saint-Vivant Grand Cru',
+    '클로 드 부조': 'Clos de Vougeot Grand Cru',
+    '꼬르통 샤를마뉴': 'Corton-Charlemagne Grand Cru',
+    '코르통 샤를마뉴': 'Corton-Charlemagne Grand Cru',
     '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
     '로버트 몬다비 까베르네 소비뇽': 'Robert Mondavi Winery Cabernet Sauvignon',
     '로버트 몬다비 오크빌': 'Robert Mondavi Winery Oakville Cabernet Sauvignon',
@@ -58,11 +75,10 @@ function getWineEnglishName(koreanName) {
     '인시그니아': 'Joseph Phelps Insignia',
     '돔 페리뇽': 'Dom Pérignon Vintage Champagne',
     '돔페리뇽': 'Dom Pérignon Vintage Champagne',
-    '크루그 그랑 퀴베': 'Krug Grande Cuvée Brut Champagne',
-    '루이 로드레 크리스탈': 'Louis Roederer Cristal Brut Champagne',
-    '아르망 드 브리냑': 'Armand de Brignac Ace of Spades',
-    '케이머스 까베르네 소비뇽': 'Caymus Vineyards Cabernet Sauvignon',
-    '실버 오크 나파 밸리': 'Silver Oak Napa Valley Cabernet Sauvignon',
+    '크루그': 'Krug Brut Champagne',
+    '크리스탈': 'Louis Roederer Cristal Brut Champagne',
+    '케이머스': 'Caymus Vineyards Cabernet Sauvignon',
+    '실버 오크': 'Silver Oak Napa Valley Cabernet Sauvignon',
     '샤또 딸보': 'Château Talbot',
     '샤또 린쉬 바쥬': 'Château Lynch-Bages',
     '샤또 퐁테 카네': 'Château Pontet-Canet',
@@ -71,19 +87,13 @@ function getWineEnglishName(koreanName) {
     '샤또 깔롱 세귀르': 'Château Calon-Ségur',
     '샤또 지스쿠르': 'Château Giscours',
     '샤또 베이슈벨': 'Château Beychevelle',
-    '몬테스 알파 까베르네 소비뇽': 'Montes Alpha Cabernet Sauvignon',
+    '몬테스 알파': 'Montes Alpha Cabernet Sauvignon',
     '몬테스 퍼플 엔젤': 'Montes Purple Angel Carménère',
-    '세냐': 'Seña',
     '돈 멜초': 'Concha y Toro Don Melchor',
-    '1865 까베르네 소비뇽': 'San Pedro 1865 Selected Vineyards Cabernet Sauvignon',
     '펜폴즈 그랜지': 'Penfolds Grange Shiraz',
-    '펜폴즈 빈 389': 'Penfolds Bin 389 Cabernet Shiraz',
-    '펜폴즈 빈 407': 'Penfolds Bin 407 Cabernet Sauvignon',
-    '투핸즈 엔젤스 쉐어': "Two Hands Angel's Share Shiraz",
-    '투핸즈 벨라스 가든': "Two Hands Bella's Garden Shiraz",
-    '몰리두커 더 복서': 'Mollydooker The Boxer Shiraz',
+    '투핸즈': 'Two Hands Shiraz',
+    '몰리두커': 'Mollydooker Shiraz',
     '우니코': 'Vega Sicilia Único',
-    '핑구스': 'Dominio de Pingus Pingus',
   };
 
   for (const [k, v] of Object.entries(EXACT_MAP)) {
@@ -91,6 +101,9 @@ function getWineEnglishName(koreanName) {
   }
 
   const REPLACEMENTS = [
+    [/부샤\s*페레|부샤/g, 'Bouchard Père & Fils '],
+    [/슈발리에\s*몽라쉐/g, 'Chevalier-Montrachet '],
+    [/몽라쉐/g, 'Montrachet '],
     [/샤또|샤토/g, 'Château '],
     [/도멘/g, 'Domaine '],
     [/테누타/g, 'Tenuta '],
@@ -104,7 +117,6 @@ function getWineEnglishName(koreanName) {
     [/이기갈|이\s*기갈/g, 'E. Guigal '],
     [/루이\s*자도/g, 'Louis Jadot '],
     [/조셉\s*드루앵/g, 'Joseph Drouhin '],
-    [/부샤\s*페레/g, 'Bouchard Père & Fils '],
     [/안티노리/g, 'Antinori '],
     [/가야/g, 'Gaja '],
     [/마시/g, 'Masi '],
@@ -127,8 +139,9 @@ function getWineEnglishName(koreanName) {
     [/모스카토/g, 'Moscato '],
     [/리저브|레제르바|레세르바|리제르바/g, 'Reserve '],
     [/그랑\s*레제르바/g, 'Gran Reserva '],
-    [/그랑\s*크뤼/g, 'Grand Cru '],
+    [/그랑\s*크뤼|그랜드\s*크루/g, 'Grand Cru '],
     [/프리미에\s*크뤼/g, 'Premier Cru '],
+    [/레스\s*푸스랠스|레\s*푸셀/g, 'Les Pucelles '],
     [/클라시코/g, 'Classico '],
     [/바롤로/g, 'Barolo '],
     [/바르바레스코/g, 'Barbaresco '],
@@ -192,11 +205,12 @@ function compressImageFile(file) {
 
 function mapFromDb(row) {
   const kName = row.name || '';
+  const enName = row.english_name ? row.english_name.trim() : getWineEnglishName(kName);
   return {
     id: Number(row.id),
     country: row.country,
     name: kName,
-    englishName: getWineEnglishName(kName),
+    englishName: enName,
     vintage: row.vintage,
     rack: row.rack,
     inQty: row.in_qty,
@@ -220,13 +234,24 @@ export default function App() {
   const [showRackMap, setShowRackMap] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  
+  // 모달 상태
   const [zoomedWine, setZoomedWine] = useState(null);
   const [editingImageWine, setEditingImageWine] = useState(null);
   const [inputImageUrl, setInputImageUrl] = useState('');
+  
+  // 랙 이동 & 영문명 직접 수정 모달 상태
+  const [editingRackWine, setEditingRackWine] = useState(null);
+  const [newSelectedRack, setNewSelectedRack] = useState('1번랙');
+  const [customNewRack, setCustomNewRack] = useState('');
+
+  const [editingEnglishWine, setEditingEnglishWine] = useState(null);
+  const [inputEnglishName, setInputEnglishName] = useState('');
 
   const [newWineForm, setNewWineForm] = useState({
     country: '프랑스',
     name: '',
+    englishName: '',
     vintage: 'NV',
     rack: '1번랙',
     customRack: '',
@@ -268,19 +293,23 @@ export default function App() {
           if (headerIdx === -1) headerIdx = 1;
 
           const rows = rawData.slice(headerIdx + 1);
-          const initialData = rows.filter(r => r && r[1]).map((r, i) => ({
-            id: i + 1,
-            country: String(r[0] || '기타').trim(),
-            name: String(r[1] || '').trim(),
-            vintage: String(r[2] || 'NV').trim(),
-            rack: String(r[3] || '미지정').trim(),
-            in_qty: Number(r[4]) || 0,
-            out_qty: Number(r[5]) || 0,
-            current_qty: Number(r[6]) || 0,
-            status: String(r[7] || '정상').trim(),
-            note: String(r[8] || '').trim(),
-            custom_image: null
-          }));
+          const initialData = rows.filter(r => r && r[1]).map((r, i) => {
+            const kName = String(r[1] || '').trim();
+            return {
+              id: i + 1,
+              country: String(r[0] || '기타').trim(),
+              name: kName,
+              english_name: getWineEnglishName(kName),
+              vintage: String(r[2] || 'NV').trim(),
+              rack: String(r[3] || '미지정').trim(),
+              in_qty: Number(r[4]) || 0,
+              out_qty: Number(r[5]) || 0,
+              current_qty: Number(r[6]) || 0,
+              status: String(r[7] || '정상').trim(),
+              note: String(r[8] || '').trim(),
+              custom_image: null
+            };
+          });
 
           await supabase.from('wines').insert(initialData);
           setStockData(initialData.map(mapFromDb));
@@ -364,6 +393,51 @@ export default function App() {
     }]);
   };
 
+  // 랙 위치 변경 저장 핸들러
+  const handleSaveRackChange = async () => {
+    if (!editingRackWine) return;
+    const finalRack = newSelectedRack === '직접입력' ? (customNewRack.trim() || '미지정') : newSelectedRack;
+    const prevRack = editingRackWine.rack;
+    if (prevRack === finalRack) {
+      setEditingRackWine(null);
+      return;
+    }
+
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+    await supabase.from('wines').update({ rack: finalRack }).eq('id', editingRackWine.id);
+    await supabase.from('wine_logs').insert([{
+      log_id: String(Date.now() + Math.random()),
+      time: timeStr,
+      wine_id: editingRackWine.id,
+      name: editingRackWine.name,
+      vintage: editingRackWine.vintage,
+      rack: finalRack,
+      country: editingRackWine.country,
+      change_type: '위치이동',
+      delta: 0,
+      prev_qty: editingRackWine.currentQty,
+      new_qty: editingRackWine.currentQty,
+      reason: `위치 이동: ${prevRack} ➔ ${finalRack}`
+    }]);
+
+    setEditingRackWine(null);
+    setCustomNewRack('');
+  };
+
+  // 영문명 직접 수기 저장 핸들러
+  const handleSaveEnglishName = async () => {
+    if (!editingEnglishWine) return;
+    const trimmed = inputEnglishName.trim();
+    await supabase.from('wines').update({ english_name: trimmed }).eq('id', editingEnglishWine.id);
+    
+    // 로컬 상태 즉시 반영
+    setStockData(prev => prev.map(w => w.id === editingEnglishWine.id ? { ...w, englishName: trimmed } : w));
+    setEditingEnglishWine(null);
+    setInputEnglishName('');
+  };
+
   const handleAddNewWine = async (e) => {
     e.preventDefault();
     if (!newWineForm.name.trim()) return;
@@ -373,11 +447,14 @@ export default function App() {
       : newWineForm.rack;
     const newWineId = Date.now();
     const initialQty = Math.max(1, Number(newWineForm.qty) || 1);
+    const kName = newWineForm.name.trim();
+    const enName = newWineForm.englishName.trim() || getWineEnglishName(kName);
 
     const newWineDb = {
       id: newWineId,
       country: newWineForm.country,
-      name: newWineForm.name.trim(),
+      name: kName,
+      english_name: enName,
       vintage: newWineForm.vintage.trim() || 'NV',
       rack: targetRack,
       in_qty: initialQty,
@@ -407,7 +484,7 @@ export default function App() {
       reason: '현장 신규 입고'
     }]);
 
-    setNewWineForm({ country: '프랑스', name: '', vintage: 'NV', rack: '1번랙', customRack: '', qty: 1, note: '' });
+    setNewWineForm({ country: '프랑스', name: '', englishName: '', vintage: 'NV', rack: '1번랙', customRack: '', qty: 1, note: '' });
     setShowAddModal(false);
   };
 
@@ -430,17 +507,25 @@ export default function App() {
   };
 
   const handleUndo = async (log) => {
-    await supabase.from('wines').update({
-      current_qty: log.prevQty,
-      status: log.prevQty <= 0 ? '재고없음' : '정상'
-    }).eq('id', log.wineId);
+    if (log.changeType === '위치이동') {
+      const match = log.reason.match(/위치 이동:\s*(.+?)\s*➔\s*(.+)/);
+      if (match) {
+        const oldRack = match[1];
+        await supabase.from('wines').update({ rack: oldRack }).eq('id', log.wineId);
+      }
+    } else {
+      await supabase.from('wines').update({
+        current_qty: log.prevQty,
+        status: log.prevQty <= 0 ? '재고없음' : '정상'
+      }).eq('id', log.wineId);
+    }
 
     await supabase.from('wine_logs').delete().eq('log_id', log.logId);
     setHistoryLogs(prev => prev.filter(l => l.logId !== log.logId));
   };
 
   const handleResetToDefault = async () => {
-    if (!window.confirm('기본 엑셀(343종) 상태로 클라우드 데이터를 초기화하시겠습니까? (수정한 재고 및 등록된 사진이 초기화됩니다)')) return;
+    if (!window.confirm('기본 엑셀(343종) 상태로 클라우드 데이터를 초기화하시겠습니까? (수정한 재고, 위치 및 등록된 사진이 초기화됩니다)')) return;
     setLoading(true);
     try {
       await supabase.from('wines').delete().neq('id', 0);
@@ -457,19 +542,23 @@ export default function App() {
       if (headerIdx === -1) headerIdx = 1;
 
       const rows = rawData.slice(headerIdx + 1);
-      const defaultList = rows.filter(r => r && r[1]).map((r, i) => ({
-        id: i + 1,
-        country: String(r[0] || '기타').trim(),
-        name: String(r[1] || '').trim(),
-        vintage: String(r[2] || 'NV').trim(),
-        rack: String(r[3] || '미지정').trim(),
-        in_qty: Number(r[4]) || 0,
-        out_qty: Number(r[5]) || 0,
-        current_qty: Number(r[6]) || 0,
-        status: String(r[7] || '정상').trim(),
-        note: String(r[8] || '').trim(),
-        custom_image: null
-      }));
+      const defaultList = rows.filter(r => r && r[1]).map((r, i) => {
+        const kName = String(r[1] || '').trim();
+        return {
+          id: i + 1,
+          country: String(r[0] || '기타').trim(),
+          name: kName,
+          english_name: getWineEnglishName(kName),
+          vintage: String(r[2] || 'NV').trim(),
+          rack: String(r[3] || '미지정').trim(),
+          in_qty: Number(r[4]) || 0,
+          out_qty: Number(r[5]) || 0,
+          current_qty: Number(r[6]) || 0,
+          status: String(r[7] || '정상').trim(),
+          note: String(r[8] || '').trim(),
+          custom_image: null
+        };
+      });
 
       await supabase.from('wines').insert(defaultList);
       setStockData(defaultList.map(mapFromDb));
@@ -502,19 +591,23 @@ export default function App() {
         if (headerIdx === -1) headerIdx = 1;
 
         const rows = rawData.slice(headerIdx + 1);
-        const parsed = rows.filter(r => r && r[1]).map((r, i) => ({
-          id: i + 1,
-          country: String(r[0] || '기타').trim(),
-          name: String(r[1] || '').trim(),
-          vintage: String(r[2] || 'NV').trim(),
-          rack: String(r[3] || '미지정').trim(),
-          in_qty: Number(r[4]) || 0,
-          out_qty: Number(r[5]) || 0,
-          current_qty: Number(r[6]) || 0,
-          status: String(r[7] || '정상').trim(),
-          note: String(r[8] || '').trim(),
-          custom_image: r[9] ? String(r[9]).trim() : null,
-        }));
+        const parsed = rows.filter(r => r && r[1]).map((r, i) => {
+          const kName = String(r[1] || '').trim();
+          return {
+            id: i + 1,
+            country: String(r[0] || '기타').trim(),
+            name: kName,
+            english_name: getWineEnglishName(kName),
+            vintage: String(r[2] || 'NV').trim(),
+            rack: String(r[3] || '미지정').trim(),
+            in_qty: Number(r[4]) || 0,
+            out_qty: Number(r[5]) || 0,
+            current_qty: Number(r[6]) || 0,
+            status: String(r[7] || '정상').trim(),
+            note: String(r[8] || '').trim(),
+            custom_image: r[9] ? String(r[9]).trim() : null,
+          };
+        });
 
         await supabase.from('wines').delete().neq('id', 0);
         await supabase.from('wine_logs').delete().neq('log_id', '');
@@ -537,13 +630,14 @@ export default function App() {
     if (stockData.length === 0) return;
     const stockSheetData = [
       ['와 인 재 고 현 황'],
-      ['원산지', '와인명(한글)', '빈티지', '보관위치', '총 입고량', '총 출고량', '현재고', '상태', '비고', '이미지링크']
+      ['원산지', '와인명(한글)', '빈티지', '보관위치', '총 입고량', '총 출고량', '현재고', '상태', '비고', '이미지링크', '영문명']
     ];
     stockData.forEach(item => {
       stockSheetData.push([
         item.country, item.name, item.vintage, item.rack,
         item.inQty, item.outQty, item.currentQty, item.status, item.note,
-        item.customImage && item.customImage.startsWith('http') ? item.customImage : ''
+        item.customImage && item.customImage.startsWith('http') ? item.customImage : '',
+        item.englishName
       ]);
     });
 
@@ -561,19 +655,16 @@ export default function App() {
     XLSX.writeFile(newWb, `서울석유_와인창고_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
-  // 랙별 재고 수량 계산
   const rackCountMap = useMemo(() => {
     const map = {};
     stockData.forEach(item => { map[item.rack] = (map[item.rack] || 0) + item.currentQty; });
     return map;
   }, [stockData]);
 
-  // 천장, 박스, 기타 보관 구역 동적 분류 (1~27번 및 중앙랙 제외한 모든 실제 위치)
   const specialRacks = useMemo(() => {
     const unique = Array.from(new Set(stockData.map(item => item.rack))).filter(Boolean);
     const wallRacks = Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`);
     const centerRacks = ['중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)'];
-    
     return unique.filter(r => !wallRacks.includes(r) && !centerRacks.includes(r));
   }, [stockData]);
 
@@ -722,7 +813,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 2층 창고 랙(Rack) 구조 맵 (벽면 + 중앙랙 + 천장/박스 전체 복원) */}
+        {/* 랙 바둑판 미니맵 */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-xl">
           <div className="flex justify-between items-center">
             <button 
@@ -753,7 +844,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* 1. 외곽 벽면 랙 (1번 ~ 27번) */}
+              {/* 1. 외곽 벽면 랙 */}
               <div>
                 <span className="text-[11px] text-slate-400 font-semibold block mb-2">🧱 외곽 벽면 랙 (1번 ~ 27번)</span>
                 <div className="grid grid-cols-4 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-14 gap-1.5">
@@ -776,7 +867,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 2. 중앙 통로 랙 (1번줄 ~ 6번줄) */}
+              {/* 2. 중앙 통로 랙 */}
               <div>
                 <span className="text-[11px] text-blue-400 font-semibold block mb-2">🏢 중앙 통로 랙 (1번줄 ~ 6번줄)</span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 sm:gap-2">
@@ -801,7 +892,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3. 천장 및 박스 / 특수 보관 구역 */}
+              {/* 3. 천장 및 박스 / 특수 보관 */}
               <div>
                 <span className="text-[11px] text-amber-400 font-semibold block mb-2">📦 천장 및 박스 / 특수 보관</span>
                 <div className="flex flex-wrap gap-1.5 sm:gap-2">
@@ -883,6 +974,7 @@ export default function App() {
                   className={`bg-gradient-to-b ${countryStyle.color} border rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between relative shadow-lg hover:border-rose-500/50 transition`}
                 >
                   <div className="flex gap-3 items-start">
+                    {/* 사진 썸네일 */}
                     <div className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 rounded-xl bg-slate-950/80 border border-slate-700/80 overflow-hidden flex flex-col items-center justify-center relative group">
                       {item.customImage ? (
                         <div 
@@ -911,6 +1003,7 @@ export default function App() {
                       )}
                     </div>
 
+                    {/* 와인 핵심 정보 */}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 mb-1">
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-slate-200 flex items-center gap-1">
@@ -920,20 +1013,40 @@ export default function App() {
                         <span className="px-2 py-0.5 rounded text-[11px] font-black font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">
                           {item.vintage}
                         </span>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950/60 text-rose-300 border border-rose-800/60">
-                          📍 {item.rack}
-                        </span>
+                        
+                        {/* 랙 위치 클릭 시 이동 팝업 열기 */}
+                        <button 
+                          onClick={() => {
+                            setEditingRackWine(item);
+                            setNewSelectedRack(item.rack);
+                          }}
+                          className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950/60 text-rose-300 border border-rose-800/60 active:bg-rose-900 hover:border-rose-400 transition flex items-center gap-0.5 touch-manipulation"
+                          title="터치하여 보관 랙 위치 이동"
+                        >
+                          <span>📍 {item.rack}</span>
+                          <Edit3 className="w-2.5 h-2.5 opacity-60 ml-0.5" />
+                        </button>
                       </div>
 
+                      {/* 한글 와인명 */}
                       <h3 className="font-bold text-white text-sm sm:text-base leading-snug tracking-tight line-clamp-2 mt-1">
                         {item.name}
                       </h3>
 
-                      {item.englishName && (
-                        <p className="text-xs text-slate-400 italic font-serif leading-tight truncate mt-0.5" title={item.englishName}>
-                          {item.englishName}
+                      {/* 영문 와인명 (클릭하여 직접 수정 가능) */}
+                      <div 
+                        onClick={() => {
+                          setEditingEnglishWine(item);
+                          setInputEnglishName(item.englishName || '');
+                        }}
+                        className="cursor-pointer group flex items-center gap-1 mt-0.5"
+                        title="클릭하여 영문명 직접 입력/수정"
+                      >
+                        <p className="text-xs text-slate-400 italic font-serif leading-tight truncate group-hover:text-rose-300 transition">
+                          {item.englishName || '+ 영문명 입력'}
                         </p>
-                      )}
+                        <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 shrink-0" />
+                      </div>
 
                       {item.note && (
                         <div className="mt-1.5">
@@ -945,6 +1058,7 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* 하단 재고 버튼 */}
                   <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-3">
                     <div className="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800">
                       <button
@@ -1012,7 +1126,7 @@ export default function App() {
                     <th className="px-3 sm:px-4 py-3 font-semibold">원산지</th>
                     <th className="px-3 sm:px-5 py-3 font-semibold">와인명 (한글 / 영문)</th>
                     <th className="px-2 sm:px-3 py-3 font-semibold text-center">빈티지</th>
-                    <th className="px-3 sm:px-4 py-3 font-semibold">보관위치</th>
+                    <th className="px-3 sm:px-4 py-3 font-semibold">보관위치 (이동)</th>
                     <th className="px-3 sm:px-4 py-3 font-semibold text-center">현재고 (조정)</th>
                     <th className="px-3 sm:px-4 py-3 font-semibold">비고</th>
                     <th className="px-2 sm:px-3 py-3 font-semibold text-center">비비노</th>
@@ -1042,13 +1156,30 @@ export default function App() {
                       <td className="px-3 sm:px-4 py-3 text-slate-400">{item.country}</td>
                       <td className="px-3 sm:px-5 py-3 max-w-xs">
                         <div className="font-medium text-white truncate">{item.name}</div>
-                        <div className="text-[11px] text-slate-400 italic truncate font-serif">{item.englishName}</div>
+                        <div 
+                          onClick={() => {
+                            setEditingEnglishWine(item);
+                            setInputEnglishName(item.englishName || '');
+                          }}
+                          className="text-[11px] text-slate-400 italic truncate font-serif cursor-pointer hover:text-rose-300"
+                          title="클릭하여 영문명 수정"
+                        >
+                          {item.englishName || '+ 영문명 입력'}
+                        </div>
                       </td>
                       <td className="px-2 sm:px-3 py-3 text-slate-300 text-center font-mono">{item.vintage}</td>
                       <td className="px-3 sm:px-4 py-3">
-                        <span className="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-300 border border-slate-700">
-                          {item.rack}
-                        </span>
+                        <button
+                          onClick={() => {
+                            setEditingRackWine(item);
+                            setNewSelectedRack(item.rack);
+                          }}
+                          className="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-200 border border-slate-700 hover:border-rose-400 flex items-center gap-1 transition"
+                          title="랙 위치 변경"
+                        >
+                          <span>{item.rack}</span>
+                          <Edit3 className="w-2.5 h-2.5 text-slate-400" />
+                        </button>
                       </td>
                       <td className="px-3 sm:px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
@@ -1067,7 +1198,7 @@ export default function App() {
                             onClick={() => handleQtyChange(item.id, 1, '입고')}
                             className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center touch-manipulation"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -1091,7 +1222,98 @@ export default function App() {
         )}
       </main>
 
-      {/* 사진 확대 모달 */}
+      {/* 1. 보관 랙 위치 이동 모달 */}
+      {editingRackWine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-rose-500" /> 보관 랙 위치 이동
+                </h3>
+                <p className="text-xs text-rose-400 mt-0.5 truncate max-w-[240px]">{editingRackWine.name}</p>
+              </div>
+              <button onClick={() => setEditingRackWine(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <span className="text-xs text-slate-400 block mb-1">현재 보관 위치</span>
+                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-sm font-bold text-white font-mono">
+                  📍 {editingRackWine.rack}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">이동할 새 랙 선택</label>
+                <select
+                  value={newSelectedRack}
+                  onChange={(e) => setNewSelectedRack(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500"
+                >
+                  {COMMON_RACKS.map(r => (<option key={r} value={r}>{r}</option>))}
+                </select>
+              </div>
+
+              {newSelectedRack === '직접입력' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">새 보관 위치 직접 입력</label>
+                  <input
+                    type="text"
+                    placeholder="예: VIP룸 1번 수납장, 천장A구역 등"
+                    value={customNewRack}
+                    onChange={(e) => setCustomNewRack(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-rose-500/60 rounded-xl text-sm text-white"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex gap-2">
+              <button type="button" onClick={() => setEditingRackWine(null)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs">취소</button>
+              <button type="button" onClick={handleSaveRackChange} className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md">이동 완료</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. 영문 와인명 수기 수정 모달 */}
+      {editingEnglishWine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-amber-400" /> 영문 와인명 수정
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[240px]">{editingEnglishWine.name}</p>
+              </div>
+              <button onClick={() => setEditingEnglishWine(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-300">정확한 영문 와인명 입력</label>
+              <input
+                type="text"
+                placeholder="예: Domaine Leflaive Chevalier-Montrachet"
+                value={inputEnglishName}
+                onChange={(e) => setInputEnglishName(e.target.value)}
+                className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500"
+              />
+              <p className="text-[11px] text-slate-500">
+                * 여기에 입력한 영문명으로 비비노 평점이 매칭되며 상단 검색창에서 영문 검색이 가능해집니다.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex gap-2">
+              <button type="button" onClick={() => setEditingEnglishWine(null)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs">취소</button>
+              <button type="button" onClick={handleSaveEnglishName} className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. 사진 확대 모달 */}
       {zoomedWine && (
         <div 
           onClick={() => setZoomedWine(null)}
@@ -1130,8 +1352,19 @@ export default function App() {
                   <span className="font-bold text-amber-300 font-mono text-sm">{zoomedWine.vintage}</span>
                   <span className="text-slate-300 ml-1.5">({zoomedWine.country})</span>
                 </div>
-                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">보관 랙 위치</span>
+                <div 
+                  onClick={() => {
+                    const target = zoomedWine;
+                    setZoomedWine(null);
+                    setEditingRackWine(target);
+                    setNewSelectedRack(target.rack);
+                  }}
+                  className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-rose-500/50 transition"
+                  title="터치하여 랙 이동"
+                >
+                  <span className="text-[10px] text-slate-400 block flex items-center justify-between">
+                    보관 랙 위치 <Edit3 className="w-2.5 h-2.5 text-rose-400" />
+                  </span>
                   <span className="font-bold text-rose-400 text-sm">📍 {zoomedWine.rack}</span>
                 </div>
               </div>
@@ -1164,7 +1397,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 사진 등록 모달 */}
+      {/* 4. 사진 등록 모달 */}
       {editingImageWine && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
@@ -1221,7 +1454,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 와인 추가 모달 */}
+      {/* 5. 와인 추가 모달 */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col">
@@ -1235,7 +1468,7 @@ export default function App() {
 
             <form onSubmit={handleAddNewWine} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">와인명 *</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">와인명 (한글) *</label>
                 <input
                   type="text"
                   required
@@ -1244,11 +1477,17 @@ export default function App() {
                   onChange={(e) => setNewWineForm({ ...newWineForm, name: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
                 />
-                {newWineForm.name.trim() && (
-                  <p className="text-xs text-rose-400 italic mt-1 font-serif">
-                    영문 자동 표기: {getWineEnglishName(newWineForm.name)}
-                  </p>
-                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">영문 와인명 (선택, 비워두면 자동 완성)</label>
+                <input
+                  type="text"
+                  placeholder="예: Opus One, Château Margaux"
+                  value={newWineForm.englishName}
+                  onChange={(e) => setNewWineForm({ ...newWineForm, englishName: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1296,7 +1535,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 변경 이력 모달 */}
+      {/* 6. 변경 이력 모달 */}
       {showLogModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl">
@@ -1313,12 +1552,17 @@ export default function App() {
                 <div key={log.logId} className="bg-slate-950 border border-slate-800/90 rounded-xl p-3 sm:p-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.changeType.includes('등록') ? 'bg-emerald-500/20 text-emerald-300' : log.changeType.includes('입고') ? 'bg-blue-500/20 text-blue-300' : 'bg-rose-500/20 text-rose-300'}`}>{log.changeType}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        log.changeType === '위치이동' ? 'bg-purple-500/20 text-purple-300' :
+                        log.changeType.includes('등록') ? 'bg-emerald-500/20 text-emerald-300' :
+                        log.changeType.includes('입고') ? 'bg-blue-500/20 text-blue-300' : 'bg-rose-500/20 text-rose-300'
+                      }`}>
+                        {log.changeType}
+                      </span>
                       <span className="text-[11px] text-slate-400 font-mono">{log.time}</span>
-                      <span className="text-[11px] text-slate-500">📍 {log.rack}</span>
                     </div>
                     <p className="font-semibold text-white text-xs sm:text-sm truncate">{log.name} ({log.vintage})</p>
-                    <p className="text-xs text-slate-400 mt-0.5">재고 변동: <span className="font-mono text-slate-300">{log.prevQty}병</span> ➔ <strong className="font-mono text-emerald-400">{log.newQty}병</strong></p>
+                    <p className="text-xs text-slate-400 mt-0.5 font-mono">{log.reason}</p>
                   </div>
                   <button onClick={() => handleUndo(log)} className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg text-xs font-semibold shrink-0 border border-amber-500/30 transition touch-manipulation">
                     <RotateCcw className="w-3.5 h-3.5" /> <span>되돌리기</span>
