@@ -228,6 +228,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRack, setSelectedRack] = useState('전체');
   const [selectedCountry, setSelectedCountry] = useState('전체');
+  const [selectedVintage, setSelectedVintage] = useState('전체'); // [추가] 빈티지 필터 상태
   const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [showRackMap, setShowRackMap] = useState(false);
@@ -714,6 +715,12 @@ export default function App() {
     return ['전체', ...unique];
   }, [stockData]);
 
+  // [추가] 등록된 모든 빈티지 목록 추출 (중복 제거 및 정렬)
+  const vintageList = useMemo(() => {
+    const unique = Array.from(new Set(stockData.map(item => item.vintage))).filter(Boolean);
+    return ['전체', ...unique.sort((a, b) => b.localeCompare(a))];
+  }, [stockData]);
+
   const filteredData = useMemo(() => {
     const term = searchTerm.toLowerCase();
     return stockData.filter(item => {
@@ -723,10 +730,11 @@ export default function App() {
                           item.note.toLowerCase().includes(term);
       const matchRack = selectedRack === '전체' || item.rack === selectedRack;
       const matchCountry = selectedCountry === '전체' || item.country === selectedCountry;
+      const matchVintage = selectedVintage === '전체' || item.vintage === selectedVintage; // [추가] 빈티지 필터 적용
       const matchStatus = onlyOutOfStock ? (item.currentQty <= 0 || item.status === '재고없음') : true;
-      return matchSearch && matchRack && matchCountry && matchStatus;
+      return matchSearch && matchRack && matchCountry && matchVintage && matchStatus;
     });
-  }, [stockData, searchTerm, selectedRack, selectedCountry, onlyOutOfStock]);
+  }, [stockData, searchTerm, selectedRack, selectedCountry, selectedVintage, onlyOutOfStock]);
 
   const stats = useMemo(() => {
     const totalBottles = stockData.reduce((acc, cur) => acc + cur.currentQty, 0);
@@ -958,7 +966,7 @@ export default function App() {
           )}
         </div>
 
-        {/* 검색 바 */}
+        {/* 검색 및 필터 바 (국가, 빈티지 필터 나란히 배치) */}
         <div className="bg-slate-900/80 border border-slate-800 p-3 sm:p-4 rounded-xl sm:rounded-2xl space-y-3">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -973,12 +981,22 @@ export default function App() {
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              {/* 국가 필터 */}
               <select
                 value={selectedCountry}
                 onChange={(e) => setSelectedCountry(e.target.value)}
                 className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-rose-500 truncate"
               >
                 {countryList.map(c => (<option key={c} value={c}>{c === '전체' ? '🌍 전체 국가' : `🌍 ${c}`}</option>))}
+              </select>
+
+              {/* [추가] 빈티지 필터 */}
+              <select
+                value={selectedVintage}
+                onChange={(e) => setSelectedVintage(e.target.value)}
+                className="bg-slate-950 border border-slate-800 text-amber-300 font-mono text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-rose-500 truncate"
+              >
+                {vintageList.map(v => (<option key={v} value={v}>{v === '전체' ? '📅 전체 빈티지' : `📅 ${v}`}</option>))}
               </select>
 
               <button
@@ -1438,7 +1456,7 @@ export default function App() {
         </div>
       )}
 
-      {/* [수정됨] 와인 추가 모달 (원산지 옆 빈티지 입력 필드 추가) */}
+      {/* 와인 추가 모달 */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col">
@@ -1449,7 +1467,6 @@ export default function App() {
               </div>
               <button onClick={() => setShowAddModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
-
             <form onSubmit={handleAddNewWine} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">와인명 (한글) *</label>
@@ -1462,7 +1479,6 @@ export default function App() {
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
                 />
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">영문 와인명 (선택)</label>
                 <input
@@ -1473,8 +1489,6 @@ export default function App() {
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif placeholder-slate-500 focus:outline-none focus:border-rose-500"
                 />
               </div>
-
-              {/* 국가 선택 및 빈티지 입력란을 나란히 배치 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">원산지 (국가)</label>
@@ -1485,16 +1499,9 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">빈티지</label>
-                  <input
-                    type="text"
-                    placeholder="예: 2018 또는 NV"
-                    value={newWineForm.vintage}
-                    onChange={(e) => setNewWineForm({ ...newWineForm, vintage: e.target.value })}
-                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500"
-                  />
+                  <input type="text" placeholder="예: 2018 또는 NV" value={newWineForm.vintage} onChange={(e) => setNewWineForm({ ...newWineForm, vintage: e.target.value })} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500" />
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">보관 랙</label>
@@ -1507,16 +1514,13 @@ export default function App() {
                   <input type="number" min="1" value={newWineForm.qty} onChange={(e) => setNewWineForm({ ...newWineForm, qty: Number(e.target.value) })} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-mono" />
                 </div>
               </div>
-
               {newWineForm.rack === '직접입력' && (
                 <input type="text" placeholder="보관 구역 직접 입력" value={newWineForm.customRack} onChange={(e) => setNewWineForm({ ...newWineForm, customRack: e.target.value })} className="w-full px-3.5 py-2.5 bg-slate-950 border border-rose-500/50 rounded-xl text-sm text-white" />
               )}
-
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">비고 (선택)</label>
                 <input type="text" placeholder="매그넘, 선물용 등" value={newWineForm.note} onChange={(e) => setNewWineForm({ ...newWineForm, note: e.target.value })} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white" />
               </div>
-
               <div className="pt-3 border-t border-slate-800 flex gap-2">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-sm">취소</button>
                 <button type="submit" className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-bold shadow-lg">등록 완료</button>
