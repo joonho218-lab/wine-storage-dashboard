@@ -25,7 +25,7 @@ const COMMON_RACKS = [
   '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
 ];
 
-// 제공해주신 엑셀 전 품목 1:1 정밀 영문 데이터베이스 사전
+// 전달해주신 전체 와인 목록 1:1 정밀 영문 데이터베이스
 const MASTER_WINE_DICTIONARY = {
   // 미국
   '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
@@ -140,7 +140,6 @@ const MASTER_WINE_DICTIONARY = {
   'Phillip Pacalet Chambolle Musigny 1er Cru "Les Sentiers"': "Philippe Pacalet Chambolle-Musigny 1er Cru 'Les Sentiers'",
   '샤또 린치 바쥐': 'Château Lynch-Bages',
   '샤또 린쉬 바쥬': 'Château Lynch-Bages',
-  '샤또 린치 바쥐': 'Château Lynch-Bages',
   '아르망드 브리냑 로제 750ml': 'Armand de Brignac Ace of Spades Brut Rosé Champagne',
   '크룩 KRUG 샴페인': 'Krug Grande Cuvée Brut Champagne',
   '헨리옷 HENRIOT 샴페인': 'Champagne Henriot Brut Millésimé',
@@ -292,7 +291,12 @@ function compressImageFile(file) {
 
 function mapFromDb(row) {
   const kName = row.name || '';
-  const enName = row.english_name ? row.english_name.trim() : getWineEnglishName(kName);
+  const dictName = getWineEnglishName(kName);
+  
+  // 기존 DB에 '... Wine' 접미사가 붙었거나 한글이 섞여 있으면 마스터 사전으로 즉시 갱신
+  const isLegacy = row.english_name && (row.english_name.endsWith('Wine') || /[가-힣]/.test(row.english_name));
+  const enName = (!row.english_name || isLegacy) ? (dictName || '') : row.english_name.trim();
+
   return {
     id: Number(row.id),
     country: row.country,
@@ -943,7 +947,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-28">
-      {/* 2단 헤더 */}
+      {/* 상단 헤더 */}
       <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-30 px-3.5 sm:px-6 py-2.5 sm:py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center justify-between gap-2">
@@ -1203,7 +1207,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* [개선된 호텔 셀러 스타일 미니멀 카드 뷰] */}
+        {/* 카드 뷰 */}
         {viewMode === 'grid' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredData.map((item) => {
@@ -1217,7 +1221,7 @@ export default function App() {
                   className="bg-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between shadow-xl transition relative group"
                 >
                   <div>
-                    {/* 1. 상단 미니멀 메타 바 (국가, 빈티지, 랙 위치) */}
+                    {/* 상단 메타 바 */}
                     <div className="flex items-center justify-between text-xs pb-2.5 mb-3 border-b border-slate-800/60 text-slate-400">
                       <div className="flex items-center gap-1.5">
                         <span>{countryStyle.flag}</span>
@@ -1240,7 +1244,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* 2. 중앙 컨텐츠 (좌측 썸네일 + 우측 와인명 / 영문명 / 비고) */}
+                    {/* 중앙 컨텐츠 */}
                     <div className="flex gap-3.5 items-start">
                       {/* 사진 썸네일 */}
                       <div className="w-20 h-24 sm:w-22 sm:h-26 shrink-0 rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex flex-col items-center justify-center relative">
@@ -1271,14 +1275,12 @@ export default function App() {
                         )}
                       </div>
 
-                      {/* 와인 이름 영역 */}
+                      {/* 와인 이름 및 비고 */}
                       <div className="flex-1 min-w-0">
-                        {/* 한글 와인명 */}
                         <h3 className="font-bold text-white text-sm sm:text-base leading-snug tracking-tight line-clamp-2">
                           {item.name}
                         </h3>
 
-                        {/* 정통 영문 와인명 (클릭하여 수정 가능) */}
                         <div 
                           onClick={() => {
                             setEditingEnglishWine(item);
@@ -1293,7 +1295,6 @@ export default function App() {
                           <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover/en:opacity-100 shrink-0" />
                         </div>
 
-                        {/* 비고란 메모 (단정하고 은은한 라벨 스타일) */}
                         <div className="mt-2">
                           {item.note ? (
                             <button
@@ -1326,7 +1327,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 3. 하단 컨트롤 바 (Vivino 평점 링크 & 단정한 재고 증감 카운터) */}
+                  {/* 하단 컨트롤 바 */}
                   <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between gap-2 mt-3.5">
                     <div className="flex items-center gap-1.5">
                       <a
@@ -1349,7 +1350,6 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* 재고 증감 카운터 */}
                     <div className="flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800">
                       <button
                         onClick={() => handleQtyChange(item.id, -1, '출고')}
@@ -1657,7 +1657,7 @@ export default function App() {
             </div>
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-300">정확한 영문 와인명 입력</label>
-              <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
+              <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
             </div>
             <div className="pt-3 border-t border-slate-800 flex gap-2">
               <button onClick={() => setEditingEnglishWine(null)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs">취소</button>
@@ -1788,7 +1788,7 @@ export default function App() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">영문 와인명 (선택, 비워두면 자동 완성)</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">영문 와인명 (선택, 비워두면 자동 매칭)</label>
                 <input
                   type="text"
                   placeholder="예: Opus One, Château Margaux"
