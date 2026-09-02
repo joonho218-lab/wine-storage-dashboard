@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
 import { 
-  Wine, Search, Layers, AlertTriangle, Download,
+  Wine, Search, Layers, AlertTriangle, Upload, Download,
   ExternalLink, LayoutGrid, Table, Plus, Minus, 
-  Grid3X3, History, RotateCcw, X, Camera,
+  Grid3X3, History, RotateCcw, X, Camera, RefreshCw,
   ChevronDown, ChevronUp, PlusCircle, Image as ImageIcon, Trash2
 } from 'lucide-react';
 
@@ -300,6 +300,102 @@ export default function App() {
     setHistoryLogs(prev => prev.filter(l => l.logId !== log.logId));
   };
 
+  // 1. 초기화 핸들러 (클라우드 데이터를 기본 343종으로 복구)
+  const handleResetToDefault = async () => {
+    if (!window.confirm('기본 엑셀(343종) 상태로 클라우드 데이터를 초기화하시겠습니까? (수정한 재고 및 등록된 사진이 초기화됩니다)')) return;
+    setLoading(true);
+    try {
+      await supabase.from('wines').delete().neq('id', 0);
+      await supabase.from('wine_logs').delete().neq('log_id', '');
+
+      const res = await fetch('/wine_data.xlsx');
+      const ab = await res.arrayBuffer();
+      const wb = XLSX.read(ab, { type: 'array' });
+      const sheetName = wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      let headerIdx = rawData.findIndex(r => r && r.includes('와인명'));
+      if (headerIdx === -1) headerIdx = 1;
+
+      const rows = rawData.slice(headerIdx + 1);
+      const defaultList = rows.filter(r => r && r[1]).map((r, i) => ({
+        id: i + 1,
+        country: String(r[0] || '기타').trim(),
+        name: String(r[1] || '').trim(),
+        vintage: String(r[2] || 'NV').trim(),
+        rack: String(r[3] || '미지정').trim(),
+        in_qty: Number(r[4]) || 0,
+        out_qty: Number(r[5]) || 0,
+        current_qty: Number(r[6]) || 0,
+        status: String(r[7] || '정상').trim(),
+        note: String(r[8] || '').trim(),
+        custom_image: null
+      }));
+
+      await supabase.from('wines').insert(defaultList);
+      setStockData(defaultList.map(mapFromDb));
+      setHistoryLogs([]);
+      alert('기본 데이터로 초기화가 완료되었습니다.');
+    } catch (err) {
+      console.error('초기화 실패:', err);
+      alert('초기화 중 오류가 발생했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 2. 새 엑셀 파일 수동 업로드 핸들러 (클라우드 데이터 전체 교체)
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!window.confirm(`선택한 엑셀 파일(${file.name})로 클라우드 데이터를 전체 교체하시겠습니까?`)) return;
+
+    setLoading(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const sheetName = wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        let headerIdx = rawData.findIndex(r => r && r.includes('와인명'));
+        if (headerIdx === -1) headerIdx = 1;
+
+        const rows = rawData.slice(headerIdx + 1);
+        const parsed = rows.filter(r => r && r[1]).map((r, i) => ({
+          id: i + 1,
+          country: String(r[0] || '기타').trim(),
+          name: String(r[1] || '').trim(),
+          vintage: String(r[2] || 'NV').trim(),
+          rack: String(r[3] || '미지정').trim(),
+          in_qty: Number(r[4]) || 0,
+          out_qty: Number(r[5]) || 0,
+          current_qty: Number(r[6]) || 0,
+          status: String(r[7] || '정상').trim(),
+          note: String(r[8] || '').trim(),
+          custom_image: r[9] ? String(r[9]).trim() : null,
+        }));
+
+        await supabase.from('wines').delete().neq('id', 0);
+        await supabase.from('wine_logs').delete().neq('log_id', '');
+
+        await supabase.from('wines').insert(parsed);
+        setStockData(parsed.map(mapFromDb));
+        setHistoryLogs([]);
+        alert(`${parsed.length}종의 데이터가 클라우드에 성공적으로 반영되었습니다.`);
+      } catch (err) {
+        console.error('업로드 실패:', err);
+        alert('엑셀 파일을 읽는 중 오류가 발생했습니다.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   const handleDownloadExcel = () => {
     if (stockData.length === 0) return;
     const stockSheetData = [
@@ -334,6 +430,16 @@ export default function App() {
     return map;
   }, [stockData]);
 
+  const rackList = useMemo(() => {
+    const unique = Array.from(new Set(stockData.map(item => item.rack))).filter(Boolean);
+    return ['전체', ...unique.sort((a, b) => {
+      const numA = parseInt(a.replace(/[^0-9]/g, '')) || 999;
+      const numB = parseInt(b.replace(/[^0-9]/g, '')) || 999;
+      if (numA !== numB) return numA - numB;
+      return a.localeCompare(b);
+    })];
+  }, [stockData]);
+
   const countryList = useMemo(() => {
     const unique = Array.from(new Set(stockData.map(item => item.country))).filter(Boolean);
     return ['전체', ...unique];
@@ -362,13 +468,14 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
         <Wine className="w-10 h-10 text-rose-500 animate-bounce" />
-        <p className="text-sm font-medium">클라우드 데이터베이스와 실시간 연결 중입니다...</p>
+        <p className="text-sm font-medium">클라우드 데이터베이스 처리 중입니다...</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-28">
+      {/* 상단 헤더 */}
       <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-30 px-3 sm:px-6 py-3 sm:py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -386,7 +493,9 @@ export default function App() {
             </div>
           </div>
 
+          {/* 우측 상단 버튼 전체 그룹 */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* 1. 와인 추가 */}
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-1 px-2.5 sm:px-3.5 py-2 bg-rose-600 active:bg-rose-700 hover:bg-rose-500 text-white rounded-xl text-xs sm:text-sm font-bold transition shadow-md shadow-rose-950/50 touch-manipulation"
@@ -395,6 +504,7 @@ export default function App() {
               <span>와인추가</span>
             </button>
 
+            {/* 2. 변경 이력 */}
             <button
               onClick={() => setShowLogModal(true)}
               className="relative flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -408,18 +518,38 @@ export default function App() {
               )}
             </button>
 
+            {/* 3. 엑셀 다운로드 */}
             <button
               onClick={handleDownloadExcel}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40 touch-manipulation"
+              title="수정본 엑셀 다운로드"
             >
               <Download className="w-3.5 h-3.5" />
               <span>엑셀다운</span>
             </button>
+
+            {/* 4. 초기화 버튼 */}
+            <button
+              onClick={handleResetToDefault}
+              className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
+              title="기본 엑셀 데이터로 초기화"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+              <span>초기화</span>
+            </button>
+
+            {/* 5. 새 파일 (엑셀 업로드) */}
+            <label className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer transition touch-manipulation" title="새 엑셀 파일로 클라우드 덮어쓰기">
+              <Upload className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">새 파일</span>
+              <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
+            </label>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* 상단 통계 카드 */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <div className="bg-slate-900/90 border border-slate-800 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl">
             <span className="text-[10px] sm:text-xs text-slate-400 font-medium flex items-center gap-1">
