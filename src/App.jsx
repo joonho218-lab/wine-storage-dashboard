@@ -9,14 +9,15 @@ import {
   ZoomIn, Edit3, MapPin, AlertCircle, Check
 } from 'lucide-react';
 
+// Windows PC에서도 국기가 깨지지 않고 완벽하게 출력되도록 국가별 코드(ISO-2) 매핑
 const COUNTRY_INFO = {
-  '프랑스': { flag: '🇫🇷', label: 'France' },
-  '미국': { flag: '🇺🇸', label: 'USA' },
-  '이탈리아': { flag: '🇮🇹', label: 'Italy' },
-  '스페인': { flag: '🇪🇸', label: 'Spain' },
-  '호주': { flag: '🇦🇺', label: 'Australia' },
-  '칠레': { flag: '🇨🇱', label: 'Chile' },
-  '포르투갈': { flag: '🇵🇹', label: 'Portugal' },
+  '프랑스': { code: 'fr', label: 'France' },
+  '미국': { code: 'us', label: 'USA' },
+  '이탈리아': { code: 'it', label: 'Italy' },
+  '스페인': { code: 'es', label: 'Spain' },
+  '호주': { code: 'au', label: 'Australia' },
+  '칠레': { code: 'cl', label: 'Chile' },
+  '포르투갈': { code: 'pt', label: 'Portugal' },
 };
 
 const COMMON_RACKS = [
@@ -27,7 +28,6 @@ const COMMON_RACKS = [
 
 // 전달해주신 전체 와인 목록 1:1 정밀 영문 데이터베이스
 const MASTER_WINE_DICTIONARY = {
-  // 미국
   '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
   '로버트 몬다비 까베르네 소비뇽': 'Robert Mondavi Winery Cabernet Sauvignon',
   '로버트 몬다비 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
@@ -60,21 +60,15 @@ const MASTER_WINE_DICTIONARY = {
   '스크리밍 이글': 'Screaming Eagle Cabernet Sauvignon',
   '스크리밍 이글 소비뇽 블랑': 'Screaming Eagle Sauvignon Blanc',
   '캡샌디 엔드레 750ml': 'Kapcsándy Family Winery Estate Cuvée Endre',
-
-  // 호주
   '토브렉, 런릭': 'Torbreck RunRig Shiraz',
   '토브렉, 레어드 1500ml': 'Torbreck The Laird 1.5L',
   '우드커터스 쉬라즈': "Torbreck Woodcutter's Shiraz",
   '힐 오브 그레이스 쉬라즈': 'Henschke Hill of Grace Shiraz',
-
-  // 스페인
   '펠릭스 카예호, 셀렉시온 데 비녜도스 데 라 파밀리아': 'Bodegas Félix Callejo Selección de Viñedos de la Familia',
   '발부에나': 'Vega Sicilia Valbuena 5°',
   '우니코': 'Vega Sicilia Único',
   '토마스 에스테반': 'Tomás Esteban Ribera del Duero',
   '삔띠아': 'Pintia (Vega Sicilia) Toro',
-
-  // 이탈리아
   '가야, 다르마지': 'Gaja Darmagi Cabernet Sauvignon',
   '사시까이아': 'Tenuta San Guido Sassicaia',
   '사시까이아 6L': 'Tenuta San Guido Sassicaia Imperial 6L',
@@ -109,16 +103,10 @@ const MASTER_WINE_DICTIONARY = {
   '이 소디 산 니콜로750ml': 'Castellare di Castellina I Sodi di San Niccolò',
   'VINO BIANCO': 'Vino Bianco d\'Italia',
   'VINO ROSSO': 'Vino Rosso d\'Italia',
-
-  // 칠레
   '비네도 차드윅': 'Viñedo Chadwick Cabernet Sauvignon',
   'Almaviva 알마비바': 'Viña Almaviva',
   '세냐': 'Seña (Chadwick & Mondavi)',
-
-  // 포르투갈
   '테일러스 빈티지 포트': "Taylor Fladgate Vintage Port",
-
-  // 프랑스
   '도멘 퐁소, 끌로 드 라 로슈 그랑 크뤼 뀌베 비에이유 비뉴': 'Domaine Ponsot Clos de la Roche Grand Cru Cuvée Vieilles Vignes',
   '샤또 무똥 로칠드': 'Château Mouton Rothschild',
   '알베르 비쇼, 샹볼 뮈지니': 'Albert Bichot Chambolle-Musigny',
@@ -1159,7 +1147,7 @@ export default function App() {
           )}
         </div>
 
-        {/* 검색 및 필터 바 (국가, 빈티지 필터 나란히 배치) */}
+        {/* 검색 및 필터 바 */}
         <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl space-y-3">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1207,11 +1195,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* 카드 뷰 */}
+        {/* 카드 뷰 (PC/모바일 모두 고화질 국기 이미지 표시) */}
         {viewMode === 'grid' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredData.map((item) => {
-              const countryStyle = COUNTRY_INFO[item.country] || { flag: '🍷', label: item.country };
+              const countryStyle = COUNTRY_INFO[item.country] || { code: null, label: item.country };
               const searchTargetName = item.englishName || item.name;
               const vivinoSmartUrl = `https://www.google.com/search?q=${encodeURIComponent(searchTargetName + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`;
 
@@ -1221,10 +1209,19 @@ export default function App() {
                   className="bg-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between shadow-xl transition relative group"
                 >
                   <div>
-                    {/* 상단 메타 바 */}
+                    {/* 상단 메타 바 (선명한 컬러 국기 이미지 적용) */}
                     <div className="flex items-center justify-between text-xs pb-2.5 mb-3 border-b border-slate-800/60 text-slate-400">
                       <div className="flex items-center gap-1.5">
-                        <span>{countryStyle.flag}</span>
+                        {countryStyle.code ? (
+                          <img
+                            src={`https://flagcdn.com/w40/${countryStyle.code}.png`}
+                            alt={countryStyle.label}
+                            className="w-4 h-3 object-cover rounded-sm shadow-sm inline-block shrink-0"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span>🍷</span>
+                        )}
                         <span className="font-medium text-slate-300">{countryStyle.label}</span>
                         <span className="text-slate-600">·</span>
                         <span className="font-mono font-bold text-amber-300">{item.vintage}</span>
@@ -1383,7 +1380,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 테이블 뷰 */}
+        {/* 테이블 뷰 (선명한 컬러 국기 이미지 적용) */}
         {viewMode === 'table' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
             <div className="sm:hidden px-3 py-2 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400">
@@ -1404,98 +1401,115 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredData.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-800/40 transition">
-                      <td className="px-3 sm:px-4 py-2">
-                        {item.customImage ? (
-                          <img 
-                            src={item.customImage} 
-                            alt={item.name} 
-                            onClick={() => setZoomedWine(item)}
-                            className="w-9 h-9 object-contain rounded bg-slate-950 border border-slate-700 cursor-pointer" 
-                          />
-                        ) : (
-                          <button
-                            onClick={() => setEditingImageWine(item)}
-                            className="w-9 h-9 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 hover:text-white"
+                  {filteredData.map((item) => {
+                    const countryStyle = COUNTRY_INFO[item.country] || { code: null, label: item.country };
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-800/40 transition">
+                        <td className="px-3 sm:px-4 py-2">
+                          {item.customImage ? (
+                            <img 
+                              src={item.customImage} 
+                              alt={item.name} 
+                              onClick={() => setZoomedWine(item)}
+                              className="w-9 h-9 object-contain rounded bg-slate-950 border border-slate-700 cursor-pointer" 
+                            />
+                          ) : (
+                            <button
+                              onClick={() => setEditingImageWine(item)}
+                              className="w-9 h-9 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 hover:text-white"
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-3 sm:px-4 py-3 text-slate-400">
+                          <div className="flex items-center gap-1.5">
+                            {countryStyle.code ? (
+                              <img
+                                src={`https://flagcdn.com/w40/${countryStyle.code}.png`}
+                                alt={countryStyle.label}
+                                className="w-4 h-3 object-cover rounded-sm shadow-sm inline-block shrink-0"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <span>🍷</span>
+                            )}
+                            <span>{item.country}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 sm:px-5 py-3 max-w-xs">
+                          <div className="font-medium text-white truncate">{item.name}</div>
+                          <div 
+                            onClick={() => {
+                              setEditingEnglishWine(item);
+                              setInputEnglishName(item.englishName || '');
+                            }}
+                            className="text-[11px] text-slate-400 italic truncate font-serif cursor-pointer hover:text-rose-300"
                           >
-                            <Camera className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-3 sm:px-4 py-3 text-slate-400">{item.country}</td>
-                      <td className="px-3 sm:px-5 py-3 max-w-xs">
-                        <div className="font-medium text-white truncate">{item.name}</div>
-                        <div 
-                          onClick={() => {
-                            setEditingEnglishWine(item);
-                            setInputEnglishName(item.englishName || '');
-                          }}
-                          className="text-[11px] text-slate-400 italic truncate font-serif cursor-pointer hover:text-rose-300"
-                        >
-                          {item.englishName || '+ 영문명 입력'}
-                        </div>
-                      </td>
-                      <td className="px-2 sm:px-3 py-3 text-slate-300 text-center font-mono">{item.vintage}</td>
-                      <td className="px-3 sm:px-4 py-3">
-                        <button
-                          onClick={() => {
-                            setEditingRackWine(item);
-                            setNewSelectedRack(item.rack);
-                          }}
-                          className="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-200 border border-slate-700 hover:border-rose-400 flex items-center gap-1"
-                        >
-                          <span>{item.rack}</span>
-                          <Edit3 className="w-2.5 h-2.5 text-slate-400" />
-                        </button>
-                      </td>
-                      <td className="px-3 sm:px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
+                            {item.englishName || '+ 영문명 입력'}
+                          </div>
+                        </td>
+                        <td className="px-2 sm:px-3 py-3 text-slate-300 text-center font-mono">{item.vintage}</td>
+                        <td className="px-3 sm:px-4 py-3">
                           <button
-                            onClick={() => handleQtyChange(item.id, -1, '출고')}
-                            className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
+                            onClick={() => {
+                              setEditingRackWine(item);
+                              setNewSelectedRack(item.rack);
+                            }}
+                            className="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-200 border border-slate-700 hover:border-rose-400 flex items-center gap-1"
                           >
-                            <Minus className="w-3 h-3" />
+                            <span>{item.rack}</span>
+                            <Edit3 className="w-2.5 h-2.5 text-slate-400" />
                           </button>
-                          <span className={`w-8 text-center font-bold font-mono ${
-                            item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
-                          }`}>
-                            {item.currentQty}
-                          </span>
+                        </td>
+                        <td className="px-3 sm:px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleQtyChange(item.id, -1, '출고')}
+                              className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className={`w-8 text-center font-bold font-mono ${
+                              item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
+                            }`}>
+                              {item.currentQty}
+                            </span>
+                            <button
+                              onClick={() => handleQtyChange(item.id, 1, '입고')}
+                              className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-3 sm:px-4 py-3 max-w-[140px]">
                           <button
-                            onClick={() => handleQtyChange(item.id, 1, '입고')}
-                            className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
+                            type="button"
+                            onClick={() => {
+                              setEditingNoteWine(item);
+                              setInputNote(item.note || '');
+                            }}
+                            className="text-left text-slate-300 hover:text-amber-300 truncate w-full flex items-center justify-between gap-1 group"
+                            title="클릭하여 비고 수정"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <span className="truncate">{item.note || '-'}</span>
+                            <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 shrink-0" />
                           </button>
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-4 py-3 max-w-[140px]">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingNoteWine(item);
-                            setInputNote(item.note || '');
-                          }}
-                          className="text-left text-slate-300 hover:text-amber-300 truncate w-full flex items-center justify-between gap-1 group"
-                          title="클릭하여 비고 수정"
-                        >
-                          <span className="truncate">{item.note || '-'}</span>
-                          <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 shrink-0" />
-                        </button>
-                      </td>
-                      <td className="px-2 sm:px-3 py-3 text-center">
-                        <a
-                          href={`https://www.google.com/search?q=${encodeURIComponent((item.englishName || item.name) + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center p-1.5 bg-slate-800 text-slate-300 rounded-lg"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-2 sm:px-3 py-3 text-center">
+                          <a
+                            href={`https://www.google.com/search?q=${encodeURIComponent((item.englishName || item.name) + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center p-1.5 bg-slate-800 text-slate-300 rounded-lg"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1686,8 +1700,10 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
                   <span className="text-[10px] text-slate-400 block">빈티지 / 생산국</span>
-                  <span className="font-bold text-amber-300 font-mono text-sm">{zoomedWine.vintage}</span>
-                  <span className="text-slate-300 ml-1.5">({zoomedWine.country})</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="font-bold text-amber-300 font-mono text-sm">{zoomedWine.vintage}</span>
+                    <span className="text-slate-300">({zoomedWine.country})</span>
+                  </div>
                 </div>
                 <div onClick={() => { const target = zoomedWine; setZoomedWine(null); setEditingRackWine(target); setNewSelectedRack(target.rack); }} className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-rose-500/50 transition">
                   <span className="text-[10px] text-slate-400 block flex items-center justify-between">보관 랙 <Edit3 className="w-2.5 h-2.5 text-rose-400" /></span>
@@ -1719,47 +1735,6 @@ export default function App() {
                 </a>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 사진 등록 모달 */}
-      {editingImageWine && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div>
-                <h3 className="font-bold text-white text-base">와인 사진 클라우드 등록</h3>
-                <p className="text-xs text-rose-400 mt-0.5 truncate max-w-xs">{editingImageWine.name} ({editingImageWine.vintage})</p>
-              </div>
-              <button onClick={() => setEditingImageWine(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <span className="text-xs font-semibold text-slate-300 block">방법 1. 구글 이미지 자동 검색</span>
-              <a href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent((editingImageWine.englishName || editingImageWine.name) + ' ' + (editingImageWine.vintage !== 'NV' ? editingImageWine.vintage : '') + ' wine bottle label')}`} target="_blank" rel="noreferrer" className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition">
-                <Search className="w-3.5 h-3.5" /> <span>구글에서 라벨 사진 찾기</span>
-              </a>
-            </div>
-            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <span className="text-xs font-semibold text-slate-300 block">방법 2. 이미지 주소(URL) 붙여넣기</span>
-              <div className="flex gap-2">
-                <input type="url" placeholder="https://... 이미지 주소" value={inputImageUrl} onChange={(e) => setInputImageUrl(e.target.value)} className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500" />
-                <button type="button" onClick={() => inputImageUrl.trim() && handleSaveImage(inputImageUrl.trim())} className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold shrink-0 transition">적용</button>
-              </div>
-            </div>
-            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <span className="text-xs font-semibold text-slate-300 block">방법 3. 카메라 촬영 / 앨범 사진</span>
-              <label className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
-                <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                <span>카메라로 촬영하여 클라우드에 올리기</span>
-                <input type="file" accept="image/*" onChange={handleImageFileUpload} className="hidden" />
-              </label>
-            </div>
-            {editingImageWine.customImage && (
-              <button type="button" onClick={() => handleSaveImage(null)} className="w-full py-2 text-red-400 hover:bg-red-950/30 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition">
-                <Trash2 className="w-3.5 h-3.5" /> <span>등록된 사진 삭제</span>
-              </button>
-            )}
           </div>
         </div>
       )}
