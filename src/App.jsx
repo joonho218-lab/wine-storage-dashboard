@@ -300,7 +300,6 @@ export default function App() {
     setHistoryLogs(prev => prev.filter(l => l.logId !== log.logId));
   };
 
-  // 1. 초기화 핸들러 (클라우드 데이터를 기본 343종으로 복구)
   const handleResetToDefault = async () => {
     if (!window.confirm('기본 엑셀(343종) 상태로 클라우드 데이터를 초기화하시겠습니까? (수정한 재고 및 등록된 사진이 초기화됩니다)')) return;
     setLoading(true);
@@ -345,7 +344,6 @@ export default function App() {
     }
   };
 
-  // 2. 새 엑셀 파일 수동 업로드 핸들러 (클라우드 데이터 전체 교체)
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -493,9 +491,9 @@ export default function App() {
             </div>
           </div>
 
-          {/* 우측 상단 버튼 전체 그룹 */}
+          {/* 헤더 우측 5개 버튼 그룹 */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* 1. 와인 추가 */}
+            {/* 1. 와인추가 */}
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-1 px-2.5 sm:px-3.5 py-2 bg-rose-600 active:bg-rose-700 hover:bg-rose-500 text-white rounded-xl text-xs sm:text-sm font-bold transition shadow-md shadow-rose-950/50 touch-manipulation"
@@ -504,7 +502,7 @@ export default function App() {
               <span>와인추가</span>
             </button>
 
-            {/* 2. 변경 이력 */}
+            {/* 2. 이력 */}
             <button
               onClick={() => setShowLogModal(true)}
               className="relative flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -518,7 +516,7 @@ export default function App() {
               )}
             </button>
 
-            {/* 3. 엑셀 다운로드 */}
+            {/* 3. 엑셀다운 */}
             <button
               onClick={handleDownloadExcel}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40 touch-manipulation"
@@ -528,7 +526,7 @@ export default function App() {
               <span>엑셀다운</span>
             </button>
 
-            {/* 4. 초기화 버튼 */}
+            {/* 4. 초기화 */}
             <button
               onClick={handleResetToDefault}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -538,7 +536,7 @@ export default function App() {
               <span>초기화</span>
             </button>
 
-            {/* 5. 새 파일 (엑셀 업로드) */}
+            {/* 5. 새 파일 */}
             <label className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer transition touch-manipulation" title="새 엑셀 파일로 클라우드 덮어쓰기">
               <Upload className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">새 파일</span>
@@ -674,65 +672,219 @@ export default function App() {
           </div>
         </div>
 
-        {/* 갤러리 카드 뷰 */}
+        {/* 1. 개선된 컴팩트 카드 뷰 (사진은 좌측 썸네일, 정보는 우측에 큼직하게) */}
         {viewMode === 'grid' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredData.map((item) => {
               const countryStyle = COUNTRY_INFO[item.country] || { flag: '🍷', color: 'from-slate-900 to-slate-950 border-slate-800' };
-              const vivinoUrl = `https://www.vivino.com/search/wines?q=${encodeURIComponent(item.name + ' ' + (item.vintage !== 'NV' ? item.vintage : ''))}`;
+              
+              // 구글을 통해 한글 와인명으로도 비비노 공식 평점 페이지를 즉시 찾아주는 최적화 링크
+              const vivinoSmartUrl = `https://www.google.com/search?q=${encodeURIComponent(item.name + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`;
 
               return (
-                <div key={item.id} className={`bg-gradient-to-b ${countryStyle.color} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between relative shadow-lg hover:border-rose-500/50 transition`}>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-700 text-slate-200 flex items-center gap-1.5 shadow-sm">
-                        <span>{countryStyle.flag}</span>
-                        <span>{item.country}</span>
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="px-2.5 py-1 rounded-md text-xs font-black font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">{item.vintage}</span>
-                        <span className="px-2.5 py-1 rounded-md text-xs font-bold bg-rose-950/60 text-rose-300 border border-rose-800/60">📍 {item.rack}</span>
-                      </div>
+                <div 
+                  key={item.id} 
+                  className={`bg-gradient-to-b ${countryStyle.color} border rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between relative shadow-lg hover:border-rose-500/50 transition`}
+                >
+                  {/* 상단: 좌측 썸네일 + 우측 핵심 와인 정보 */}
+                  <div className="flex gap-3 items-start">
+                    {/* 좌측: 적당한 크기의 사진 썸네일 (명함 크기) */}
+                    <div className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 rounded-xl bg-slate-950/80 border border-slate-700/80 overflow-hidden flex flex-col items-center justify-center relative group">
+                      {item.customImage ? (
+                        <>
+                          <img
+                            src={item.customImage}
+                            alt={item.name}
+                            onClick={() => setEditingImageWine(item)}
+                            className="w-full h-full object-contain p-1 cursor-pointer"
+                          />
+                          <div
+                            onClick={() => setEditingImageWine(item)}
+                            className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-[10px] text-white font-medium cursor-pointer"
+                          >
+                            변경
+                          </div>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setEditingImageWine(item)}
+                          className="w-full h-full flex flex-col items-center justify-center text-slate-500 hover:text-rose-400 transition gap-1 touch-manipulation"
+                          title="사진 등록"
+                        >
+                          <Camera className="w-5 h-5 opacity-70" />
+                          <span className="text-[10px] font-medium">+사진</span>
+                        </button>
+                      )}
                     </div>
 
-                    {item.customImage ? (
-                      <div onClick={() => setEditingImageWine(item)} className="relative aspect-[16/10] rounded-xl overflow-hidden my-2.5 bg-slate-950/80 border border-slate-700 flex items-center justify-center cursor-pointer group">
-                        <img src={item.customImage} alt={item.name} className="max-h-full object-contain drop-shadow-md group-hover:scale-105 transition" />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-xs text-white gap-1 font-semibold">
-                          <Camera className="w-4 h-4" /> 사진 변경
-                        </div>
+                    {/* 우측: 핵심 정보 (국가, 빈티지, 랙, 와인명, 비고) */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-slate-200 flex items-center gap-1">
+                          <span>{countryStyle.flag}</span>
+                          <span>{item.country}</span>
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[11px] font-black font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          {item.vintage}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950/60 text-rose-300 border border-rose-800/60">
+                          📍 {item.rack}
+                        </span>
                       </div>
-                    ) : (
-                      <button onClick={() => setEditingImageWine(item)} className="w-full aspect-[16/8] rounded-xl my-2.5 border border-dashed border-slate-700/80 bg-slate-950/30 hover:bg-slate-850 hover:border-rose-500/50 transition flex flex-col items-center justify-center gap-1.5 text-slate-400 hover:text-rose-300">
-                        <ImageIcon className="w-5 h-5 opacity-70" />
-                        <span className="text-xs font-medium">+ 사진 / 라벨 등록 (자동검색)</span>
-                      </button>
-                    )}
 
-                    <h3 className="font-bold text-white text-base sm:text-lg leading-snug tracking-tight my-1.5 min-h-[2.75rem] flex items-center">{item.name}</h3>
-                    {item.note && (<span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 mb-2">🏷️ {item.note}</span>)}
+                      <h3 className="font-bold text-white text-sm sm:text-base leading-snug tracking-tight line-clamp-2" title={item.name}>
+                        {item.name}
+                      </h3>
+
+                      {item.note && (
+                        <div className="mt-1">
+                          <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 truncate max-w-full">
+                            🏷️ {item.note}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-2">
+                  {/* 하단: 재고 증감 컨트롤러 & 비비노 바로가기 */}
+                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-3">
                     <div className="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800">
-                      <button onClick={() => handleQtyChange(item.id, -1, '출고')} className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-200 transition touch-manipulation"><Minus className="w-4 h-4" /></button>
-                      <div className="w-12 text-center">
-                        <span className={`text-base font-black font-mono block ${item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{item.currentQty}</span>
-                        <span className="text-[9px] text-slate-500 block -mt-1 font-sans">현재고</span>
+                      <button
+                        onClick={() => handleQtyChange(item.id, -1, '출고')}
+                        className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-200 transition touch-manipulation"
+                        title="1병 출고"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <div className="w-11 sm:w-12 text-center">
+                        <span className={`text-base font-black font-mono block leading-none ${
+                          item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
+                        }`}>
+                          {item.currentQty}
+                        </span>
+                        <span className="text-[9px] text-slate-500 block mt-0.5 font-sans">현재고</span>
                       </div>
-                      <button onClick={() => handleQtyChange(item.id, 1, '입고')} className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-200 transition touch-manipulation"><Plus className="w-4 h-4" /></button>
+                      <button
+                        onClick={() => handleQtyChange(item.id, 1, '입고')}
+                        className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-200 transition touch-manipulation"
+                        title="1병 입고"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <button onClick={() => setEditingImageWine(item)} className="p-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 touch-manipulation"><Camera className="w-4 h-4" /></button>
-                      <a href={vivinoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 px-3 py-2 bg-slate-800 active:bg-rose-950/60 text-slate-300 rounded-xl text-xs font-semibold border border-slate-700 transition touch-manipulation">
-                        <ExternalLink className="w-3.5 h-3.5" /> <span>Vivino</span>
+                      <button
+                        onClick={() => setEditingImageWine(item)}
+                        className="p-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 touch-manipulation"
+                        title="사진 변경/등록"
+                      >
+                        <Camera className="w-4 h-4" />
+                      </button>
+
+                      <a
+                        href={vivinoSmartUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 active:bg-rose-950/60 text-slate-300 rounded-xl text-xs font-semibold border border-slate-700 transition touch-manipulation"
+                        title="비비노 평점 바로보기"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-rose-400" />
+                        <span>비비노평점</span>
                       </a>
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* 2. 테이블 표 뷰 */}
+        {viewMode === 'table' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl sm:rounded-2xl overflow-hidden shadow-xl">
+            <div className="sm:hidden px-3 py-2 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400">
+              👉 좌우로 밀어 전체 컬럼을 확인하세요
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm border-collapse whitespace-nowrap">
+                <thead className="bg-slate-950 text-slate-400 text-xs uppercase border-b border-slate-800">
+                  <tr>
+                    <th className="px-3 sm:px-4 py-3 font-semibold">사진</th>
+                    <th className="px-3 sm:px-4 py-3 font-semibold">원산지</th>
+                    <th className="px-3 sm:px-5 py-3 font-semibold">와인명</th>
+                    <th className="px-2 sm:px-3 py-3 font-semibold text-center">빈티지</th>
+                    <th className="px-3 sm:px-4 py-3 font-semibold">보관위치</th>
+                    <th className="px-3 sm:px-4 py-3 font-semibold text-center">현재고 (조정)</th>
+                    <th className="px-3 sm:px-4 py-3 font-semibold">비고</th>
+                    <th className="px-2 sm:px-3 py-3 font-semibold text-center">비비노</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredData.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-800/40 transition">
+                      <td className="px-3 sm:px-4 py-2">
+                        {item.customImage ? (
+                          <img 
+                            src={item.customImage} 
+                            alt={item.name} 
+                            onClick={() => setEditingImageWine(item)}
+                            className="w-9 h-9 object-contain rounded bg-slate-950 border border-slate-700 cursor-pointer" 
+                          />
+                        ) : (
+                          <button
+                            onClick={() => setEditingImageWine(item)}
+                            className="w-9 h-9 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 hover:text-white"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-3 sm:px-4 py-3 text-slate-400">{item.country}</td>
+                      <td className="px-3 sm:px-5 py-3 font-medium text-white max-w-xs truncate">{item.name}</td>
+                      <td className="px-2 sm:px-3 py-3 text-slate-300 text-center font-mono">{item.vintage}</td>
+                      <td className="px-3 sm:px-4 py-3">
+                        <span className="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-300 border border-slate-700">
+                          {item.rack}
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-4 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleQtyChange(item.id, -1, '출고')}
+                            className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center touch-manipulation"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className={`w-8 text-center font-bold font-mono ${
+                            item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
+                          }`}>
+                            {item.currentQty}
+                          </span>
+                          <button
+                            onClick={() => handleQtyChange(item.id, 1, '입고')}
+                            className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center touch-manipulation"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-4 py-3 text-amber-300/80 max-w-[120px] truncate">{item.note || '-'}</td>
+                      <td className="px-2 sm:px-3 py-3 text-center">
+                        <a
+                          href={`https://www.google.com/search?q=${encodeURIComponent(item.name + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center p-1.5 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-lg touch-manipulation"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </main>
@@ -757,7 +909,7 @@ export default function App() {
                 rel="noreferrer"
                 className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
               >
-                <Search className="w-3.5 h-3.5" /> <span>구글에서 사진 찾기</span>
+                <Search className="w-3.5 h-3.5" /> <span>구글에서 라벨 사진 찾기</span>
               </a>
             </div>
 
