@@ -10,13 +10,13 @@ import {
 } from 'lucide-react';
 
 const COUNTRY_INFO = {
-  '프랑스': { flag: '🇫🇷', color: 'from-blue-950/40 to-slate-900 border-blue-500/30' },
-  '미국': { flag: '🇺🇸', color: 'from-red-950/40 to-slate-900 border-red-500/30' },
-  '이탈리아': { flag: '🇮🇹', color: 'from-emerald-950/40 to-slate-900 border-emerald-500/30' },
-  '스페인': { flag: '🇪🇸', color: 'from-amber-950/40 to-slate-900 border-amber-500/30' },
-  '호주': { flag: '🇦🇺', color: 'from-cyan-950/40 to-slate-900 border-cyan-500/30' },
-  '칠레': { flag: '🇨🇱', color: 'from-rose-950/40 to-slate-900 border-rose-500/30' },
-  '포르투갈': { flag: '🇵🇹', color: 'from-orange-950/40 to-slate-900 border-orange-500/30' },
+  '프랑스': { flag: '🇫🇷', label: 'France' },
+  '미국': { flag: '🇺🇸', label: 'USA' },
+  '이탈리아': { flag: '🇮🇹', label: 'Italy' },
+  '스페인': { flag: '🇪🇸', label: 'Spain' },
+  '호주': { flag: '🇦🇺', label: 'Australia' },
+  '칠레': { flag: '🇨🇱', label: 'Chile' },
+  '포르투갈': { flag: '🇵🇹', label: 'Portugal' },
 };
 
 const COMMON_RACKS = [
@@ -25,65 +25,239 @@ const COMMON_RACKS = [
   '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
 ];
 
+// 제공해주신 엑셀 전 품목 1:1 정밀 영문 데이터베이스 사전
+const MASTER_WINE_DICTIONARY = {
+  // 미국
+  '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
+  '로버트 몬다비 까베르네 소비뇽': 'Robert Mondavi Winery Cabernet Sauvignon',
+  '로버트 몬다비 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
+  '로버트 몬다비,까베르네 소비뇽 리저브(50주년 에디션)': 'Robert Mondavi Cabernet Sauvignon Reserve 50th Anniversary',
+  '로버트 몬다비,까베르네 소비뇽 버티칼 세트': 'Robert Mondavi Cabernet Sauvignon Reserve Vertical Collection',
+  '더 마스코트': 'The Mascot (Harlan Family)',
+  '씨네퀴넌': 'Sine Qua Non',
+  '씨네퀴넌 750ml': 'Sine Qua Non',
+  '제이드 팰리스 골프클럽': 'Jade Palace Golf Club Private Reserve',
+  '피터 마이클, 레 파보': 'Peter Michael Winery Les Pavots',
+  'Grgich Hills Yountville Old Vine C/S': 'Grgich Hills Estate Yountville Old Vine Cabernet Sauvignon',
+  '오퍼스원': 'Opus One',
+  '오퍼스 원': 'Opus One',
+  '도미누스': 'Dominus Estate (Christian Moueix)',
+  '문차이 코 레오니스': 'Moontsai Cor Leonis Cabernet Sauvignon',
+  '오소메': "O'Shaughnessy Estate Winery Cabernet Sauvignon",
+  '케이머스': 'Caymus Vineyards Cabernet Sauvignon',
+  '케이머스 S.셀렉션': 'Caymus Vineyards Special Selection Cabernet Sauvignon',
+  '케이머스 S.셀렉션 (매그넘)': 'Caymus Vineyards Special Selection Cabernet Sauvignon 1.5L',
+  '더저지': 'Kongsgaard The Judge Chardonnay',
+  '꽁스가르드 샤도네이': 'Kongsgaard Chardonnay Napa Valley',
+  'My hands': 'Two Hands My Hands Shiraz',
+  '볼드멀버리': 'Bald Mountain Cabernet Sauvignon',
+  '할란에스테이트': 'Harlan Estate',
+  '조셉 펠프스 빈야드': 'Joseph Phelps Vineyards Insignia / Cabernet Sauvignon',
+  '나파벨리 까베르네 쇼비뇽 리져브': 'Napa Valley Cabernet Sauvignon Reserve',
+  '아나코타 몬타나 까베르네 쇼비뇽': 'Anakota Helena Montana Vineyard Cabernet Sauvignon',
+  '하이츠 마르따스 빈야드 카버네 소비뇽': "Heitz Cellar Martha's Vineyard Cabernet Sauvignon",
+  '레비아탄(매그넘)': 'Leviathan Red Blend 1.5L',
+  '스크리밍 이글': 'Screaming Eagle Cabernet Sauvignon',
+  '스크리밍 이글 소비뇽 블랑': 'Screaming Eagle Sauvignon Blanc',
+  '캡샌디 엔드레 750ml': 'Kapcsándy Family Winery Estate Cuvée Endre',
+
+  // 호주
+  '토브렉, 런릭': 'Torbreck RunRig Shiraz',
+  '토브렉, 레어드 1500ml': 'Torbreck The Laird 1.5L',
+  '우드커터스 쉬라즈': "Torbreck Woodcutter's Shiraz",
+  '힐 오브 그레이스 쉬라즈': 'Henschke Hill of Grace Shiraz',
+
+  // 스페인
+  '펠릭스 카예호, 셀렉시온 데 비녜도스 데 라 파밀리아': 'Bodegas Félix Callejo Selección de Viñedos de la Familia',
+  '발부에나': 'Vega Sicilia Valbuena 5°',
+  '우니코': 'Vega Sicilia Único',
+  '토마스 에스테반': 'Tomás Esteban Ribera del Duero',
+  '삔띠아': 'Pintia (Vega Sicilia) Toro',
+
+  // 이탈리아
+  '가야, 다르마지': 'Gaja Darmagi Cabernet Sauvignon',
+  '사시까이아': 'Tenuta San Guido Sassicaia',
+  '사시까이아 6L': 'Tenuta San Guido Sassicaia Imperial 6L',
+  '주세페 퀸타렐리, 아마로네 델라 발폴리첼라 클라시코': 'Giuseppe Quintarelli Amarone della Valpolicella Classico',
+  '루체 브루넬로 디 몬탈치노 1500ml': 'Tenuta Luce Brunello di Montalcino 1.5L',
+  '루체 브루넬로 디 몬탈치노 3000ml': 'Tenuta Luce Brunello di Montalcino 3.0L',
+  '루체': 'Tenuta Luce Luce Toscana',
+  'Luce 1800ml': 'Tenuta Luce Luce Toscana 1.8L',
+  '프레스코발디,카스텔지오콘도 리제르바 1500ml': 'Frescobaldi CastelGiocondo Brunello di Montalcino Riserva 1.5L',
+  '프레스코발디,카스텔지오콘도 리제르바 3000ml': 'Frescobaldi CastelGiocondo Brunello di Montalcino Riserva 3.0L',
+  'Masseto (T)': 'Tenuta dell\'Ornellaia Masseto',
+  '마세토': 'Tenuta dell\'Ornellaia Masseto',
+  '마세토 750ml': 'Tenuta dell\'Ornellaia Masseto',
+  '마세토 21': 'Tenuta dell\'Ornellaia Masseto',
+  '마세티노': 'Tenuta dell\'Ornellaia Massetino',
+  '가야, 브루넬로 디 몬탈치노 수가릴레': 'Pieve Santa Restituta (Gaja) Brunello di Montalcino Sugarille',
+  '가야, 스페르스': 'Gaja Sperss Langhe / Barolo',
+  '가야 나무 박스': 'Gaja Wooden Box Collection',
+  '고르고나 Gorgona': 'Frescobaldi Gorgona Bianco',
+  '가야, 소리 산 로렌조': 'Gaja Sorì San Lorenzo',
+  '가야, 소리 틸딘': 'Gaja Sorì Tildìn',
+  '가야, 코스타 루씨': 'Gaja Costa Russi',
+  '로카 디 프라시넬로, 바포네로': 'Rocca di Frassinello Baffonero',
+  '솔라이아': 'Antinori Solaia',
+  'Biserno': 'Tenuta di Biserno Biserno',
+  'Nittardrd': 'Fattoria Nittardi Casanuova di Nittardi',
+  '몬테 안티코': 'Monte Antico Rosso Toscana',
+  '팔라찌 테누타 디 트리노로 로쏘 토스카나': 'Tenuta di Trinoro Palazzi Rosso Toscana',
+  'Brunello Di Montalcino (매그넘)': 'Brunello di Montalcino Riserva 1.5L',
+  '가이아 앤 레이 750ml': 'Gaja Gaia & Rey Chardonnay',
+  '지아코모 콘테르노 몬포르티노 14 1500ml': 'Giacomo Conterno Barolo Riserva Monfortino 1.5L',
+  '이 소디 산 니콜로750ml': 'Castellare di Castellina I Sodi di San Niccolò',
+  'VINO BIANCO': 'Vino Bianco d\'Italia',
+  'VINO ROSSO': 'Vino Rosso d\'Italia',
+
+  // 칠레
+  '비네도 차드윅': 'Viñedo Chadwick Cabernet Sauvignon',
+  'Almaviva 알마비바': 'Viña Almaviva',
+  '세냐': 'Seña (Chadwick & Mondavi)',
+
+  // 포르투갈
+  '테일러스 빈티지 포트': "Taylor Fladgate Vintage Port",
+
+  // 프랑스
+  '도멘 퐁소, 끌로 드 라 로슈 그랑 크뤼 뀌베 비에이유 비뉴': 'Domaine Ponsot Clos de la Roche Grand Cru Cuvée Vieilles Vignes',
+  '샤또 무똥 로칠드': 'Château Mouton Rothschild',
+  '알베르 비쇼, 샹볼 뮈지니': 'Albert Bichot Chambolle-Musigny',
+  '조셉 페블레, 샹볼 뮈지니': 'Domaine Faiveley Chambolle-Musigny',
+  '페리에 주에 1500ml': 'Perrier-Jouët Belle Epoque Brut Champagne 1.5L',
+  '페리에 주에 벨에포크 750ml': 'Perrier-Jouët Belle Epoque Brut Champagne',
+  '페블레, 꼬르똥 샤를마뉴 그랑 크뤼': 'Domaine Faiveley Corton-Charlemagne Grand Cru',
+  '페블레, 샹베르땡 끌로 드 베즈 우브레 로딘 그랑크뤼': 'Domaine Faiveley Chambertin-Clos de Bèze Ouvrage Rodin Grand Cru',
+  '페블레, 샹베르땡 끌로 드 베즈 그랑 크뤼': 'Domaine Faiveley Chambertin-Clos de Bèze Grand Cru',
+  '페블레,바타르 몽라쉐 그랑 크뤼': 'Domaine Faiveley Bâtard-Montrachet Grand Cru',
+  '페블레,비엥브뉘 바타르 몽라쉐 그랑 크뤼': 'Domaine Faiveley Bienvenues-Bâtard-Montrachet Grand Cru',
+  '페블레, 꼬르똥 끌로 데 꼬르똥 그랑 크뤼': 'Domaine Faiveley Corton Clos des Cortons Faiveley Grand Cru',
+  '페블레, 꼬르똥 끌로 데 꼬르똥 그랑 크뤼 1500ml': 'Domaine Faiveley Corton Clos des Cortons Grand Cru 1.5L',
+  '페블레, 뮈즈니 그랑 크뤼': 'Domaine Faiveley Musigny Grand Cru',
+  '페블레, 에세죠 그랑 크뤼': 'Domaine Faiveley Échezeaux Grand Cru',
+  '(OT)Domaine Coche-Dury Puligny Montrachet Les Enseigneres': "Domaine Coche-Dury Puligny-Montrachet 'Les Enseignères'",
+  '(OT)Henri Boillot Chevalier Montrachet Grand Cru Blanc': 'Domaine Henri Boillot Chevalier-Montrachet Grand Cru Blanc',
+  'Ch. Les Carmes Haut Brion': 'Château Les Carmes Haut-Brion',
+  'Phillip Pacalet Chambolle Musigny 1er Cru "Les Sentiers"': "Philippe Pacalet Chambolle-Musigny 1er Cru 'Les Sentiers'",
+  '샤또 린치 바쥐': 'Château Lynch-Bages',
+  '샤또 린쉬 바쥬': 'Château Lynch-Bages',
+  '샤또 린치 바쥐': 'Château Lynch-Bages',
+  '아르망드 브리냑 로제 750ml': 'Armand de Brignac Ace of Spades Brut Rosé Champagne',
+  '크룩 KRUG 샴페인': 'Krug Grande Cuvée Brut Champagne',
+  '헨리옷 HENRIOT 샴페인': 'Champagne Henriot Brut Millésimé',
+  '꼬띠 로띠 라 뚜르크': 'E. Guigal Côte-Rôtie La Turque',
+  '꼬띠 로띠 라 랑돈': 'E. Guigal Côte-Rôtie La Landonne',
+  '꼬띠 로띠 라 물린': 'E. Guigal Côte-Rôtie La Mouline',
+  '자쿠스 셀로스 750ml 샴페인': 'Jacques Selosse Initial Brut Champagne',
+  '자쿠스 셀로스 샴페인': 'Jacques Selosse Brut Champagne',
+  '자쿠스 셀로스 로제 브뤼 750ml': 'Jacques Selosse Brut Rosé Champagne',
+  '파빌리온 루즈 샤또 마고': 'Pavillon Rouge du Château Margaux',
+  '볼랭저, 007 그랑아네 009 1500ml': 'Champagne Bollinger 007 James Bond Collector 1.5L',
+  '볼랭저, 피엔 18 AYC 1500ml': 'Champagne Bollinger PN AYC18 Brut 1.5L',
+  '샤또 꼬스 데 뚜르넬': "Château Cos d'Estournel",
+  '샤또 오-브리옹': 'Château Haut-Brion',
+  '샤또 오-브리옹 블랑': 'Château Haut-Brion Blanc',
+  '샤또 피지악': 'Château Figeac',
+  '샤또 마고': 'Château Margaux',
+  '샤또 슈발 블랑': 'Château Cheval Blanc',
+  '샤또 오베이': 'Château Haut-Bailly',
+  '샤또 뒤크르 보까이유': 'Château Ducru-Beaucaillou',
+  '샤또 뽕떼 까네': 'Château Pontet-Canet',
+  '샤또 팔머': 'Château Palmer',
+  '샤또 레글리즈 끌리네': "Château L'Église-Clinet",
+  '샤또 레오빌 라스 까스': 'Château Léoville-Las Cases',
+  '돔페리뇽': 'Dom Pérignon Vintage Brut Champagne',
+  '돔페리뇽 1500ml': 'Dom Pérignon Vintage Brut Champagne 1.5L',
+  '돔페리뇽 750ml': 'Dom Pérignon Vintage Brut Champagne',
+  '로랑페리에': 'Laurent-Perrier Brut Champagne',
+  '볼랭저, 비에이 비뉴 프랑세스': 'Champagne Bollinger Vieilles Vignes Françaises',
+  '자크숑 릴레징': 'Champagne Jacquesson Brut Millésimé',
+  '(OT) 올리비에 귀요 샹볼 뮈지니 1등급 레 보드': "Domaine Olivier Guyot Chambolle-Musigny 1er Cru 'Les Baudes'",
+  '도멘 A.F. 그로 본 로마네 끌로 드 라 퐁텐 (매그넘)': "Domaine A.-F. Gros Vosne-Romanée 'Clos de la Fontaine' 1.5L",
+  '도멘 장테 팡시오 샤름 샹베르탱 그랑 크뤼 (매그넘)': 'Domaine Geantet-Pansiot Charmes-Chambertin Grand Cru 1.5L',
+  '메종 카미유 지로 샹볼 뮈지니 1등급 레 제샹주': "Maison Camille Giroud Chambolle-Musigny 1er Cru 'Les Échanges'",
+  '샤또 라플레르': 'Château Lafleur Pomerol',
+  '샤또 앙젤루스': 'Château Angélus',
+  '프랑수아 까리용 퓔리니 몽라셰': 'François Carillon Puligny-Montrachet',
+  '볼랭저 그랑아네 1500ml': 'Champagne Bollinger La Grande Année 1.5L',
+  '볼랭저 라그랑아네 750ml': 'Champagne Bollinger La Grande Année',
+  '볼랭저 제임스 본드 007 750ml': 'Champagne Bollinger 007 Limited Edition',
+  '메종 로슈 드 벨렌 퓔리니 몽라셰 1등급 레 폴라티에르': "Maison Roche de Bellene Puligny-Montrachet 1er Cru 'Les Folatières'",
+  '샤또 디켐': "Château d'Yquem",
+  '샤또 라피트 로칠드': 'Château Lafite Rothschild',
+  '샤또 오존': 'Château Ausone',
+  '샤또 페트뤼스': 'Pétrus (Pomerol)',
+  '샤또 드 보까스텔, 샤또네프 뒤 빠쁘 루싼느 비에이유 비뉴': 'Château de Beaucastel Châteauneuf-du-Pape Roussanne VV',
+  '샤또 드 보까스텔, 샤또네프 뒤 빠쁘 루즈': 'Château de Beaucastel Châteauneuf-du-Pape Rouge',
+  '샤또 드 보까스텔, 샤또네프 뒤 빠쁘 루즈 1500ml': 'Château de Beaucastel Châteauneuf-du-Pape Rouge 1.5L',
+  '샤또 드 보까스텔, 샤또네프 뒤 빠쁘 루즈 3000ml': 'Château de Beaucastel Châteauneuf-du-Pape Rouge 3.0L',
+  '샤또 드 보까스텔, 오마쥬 자크 페랑 루즈': 'Château de Beaucastel Châteauneuf-du-Pape Hommage à Jacques Perrin',
+  '샤또 뷰 샤또 세르땅': 'Vieux Château Certan',
+  '샤또 파비': 'Château Pavie',
+  '샤또 파비용 블랑': 'Pavillon Blanc du Château Margaux',
+  'DRC 라 따쉬': 'Domaine de la Romanée-Conti La Tâche Grand Cru',
+  'DRC 라 따쉬 그랑크루 750ml': 'Domaine de la Romanée-Conti La Tâche Grand Cru',
+  'DRC, Corton': 'Domaine de la Romanée-Conti Corton Grand Cru',
+  'DRC, Fine Bourgogne': 'Domaine de la Romanée-Conti Fine Bourgogne Eau-de-Vie',
+  'DRC, Romanee st Vivant': 'Domaine de la Romanée-Conti Romanée-Saint-Vivant Grand Cru',
+  '로마네 생 비방 그랑 크뤼750ml': 'Domaine de la Romanée-Conti Romanée-Saint-Vivant Grand Cru',
+  '도멘 르플레브 룰리 프리미에 크뤼': 'Domaine Leflaive Rully 1er Cru',
+  '메르소': 'Meursault Blanc',
+  '샤또 트로타누아': 'Château Trotanoy',
+  '꽁뜨 리제벨레르 볼로마네': 'Domaine du Comte Liger-Belair Vosne-Romanée',
+  '륄리 1등급 블랑 라끌루': 'Rully 1er Cru Blanc "Les Cloux"',
+  '륄리 1등급 블랑 몽빨레': 'Rully 1er Cru Blanc "Montpalais"',
+  '부즈롱 알리고떼': 'Domaine de Villaine Bouzeron Aligoté',
+  '부즈롱 알리고뗴': 'Domaine de Villaine Bouzeron Aligoté',
+  '슈발리에 몽라쉐 그랜드 크루': 'Chevalier-Montrachet Grand Cru',
+  '슈발리에 몽라쉐 레스 푸스래스': "Chevalier-Montrachet Grand Cru 'Les Demoiselles'",
+  '부샤 슈발리에 몽라쉐 1500ml': 'Bouchard Père & Fils Chevalier-Montrachet Grand Cru 1.5L',
+  'Bouchard Cor-Charl Grand Cru': 'Bouchard Père & Fils Corton-Charlemagne Grand Cru',
+  'Bollinger Spectre James Bond 007 3L': 'Champagne Bollinger Spectre 007 Jeroboam 3.0L',
+  'Capitain Gagnerot Corton Charlemagne Grand Cru White': 'Capitain-Gagnerot Corton-Charlemagne Grand Cru Blanc',
+  '도메인 듀 꾸벙 샹볼 뮈지니 40 우브레': "Domaine du Couvent Chambolle-Musigny '40 Ouvrées'",
+  '꼬뜨 드 뉘 빌라쥬 오 풀크': "Côte de Nuits-Villages 'Aux Fourches'",
+  '뀌베 마르게릿': 'Domaine Jean-François Ganevat Cuvée Marguerite',
+  '뀌베 마르게릿 1500ml': 'Domaine Jean-François Ganevat Cuvée Marguerite 1.5L',
+  '루이 라투르 코통 샤를마뉴 그랑크뤼': 'Louis Latour Corton-Charlemagne Grand Cru',
+  '막사네 뀌베 살리(블랑)': 'Marsannay Blanc Cuvée Saint-Urbain',
+  '바슐레 모노 퓔리니 몽라셰 레 폴라티에르': "Domaine Bachelet-Monnot Puligny-Montrachet 1er Cru 'Les Folatières'",
+  '볼랭저 B16': 'Champagne Bollinger B16 Brut Millésimé',
+  '상볼 뮈지니 1등급 \'레 사름\'': "Chambolle-Musigny 1er Cru 'Les Charmes'",
+  '샤또 베이슈벨': 'Château Beychevelle',
+  '샤토 파프 클레망': 'Château Pape Clément',
+  '아 베르제르,38-40 블랑 드 블랑 그랑 크뤼': 'A. Bergère 38-40 Blanc de Blancs Grand Cru Extra Brut',
+  '쟝 마크 브와이요 풀리니 몽라세 프리미에 크뤼 삼 카네': "Jean-Marc Boillot Puligny-Montrachet 1er Cru 'Champ Canet'",
+  '크리스탈 브뤼트': 'Louis Roederer Cristal Brut Champagne',
+  '루이자도 몽라쉐 그랑크뤼': 'Louis Jadot Montrachet Grand Cru',
+  '바따르 몽라쉐 750ml': 'Bâtard-Montrachet Grand Cru',
+  '샤싼느 몽라쉐 레 마쥐르 750ml': "Chassagne-Montrachet 'Les Masures'",
+  '크로스 데라 트루피에르 푸리그니 몬트라체 1크루 750ml': "Puligny-Montrachet 1er Cru 'Clos de la Truffière'",
+  '푸리그니 몬트라체 750ml': 'Puligny-Montrachet Blanc',
+  '퓔리니 몽라쉐 라 르블랑스 750ml': "Puligny-Montrachet 'La Rue aux Vaches'",
+  'Francois d`Allaines, Chassagne-Montrachet 1er Cru `Les Chaumees`': "François d'Allaines Chassagne-Montrachet 1er Cru 'Les Chaumées'",
+  '메르뀌리 레 몽토 (RED)': "Mercurey 'Les Montots' Rouge",
+  '샤또 라 라퀸느': 'Château La Lagune (Haut-Médoc)',
+  '에세조': 'Échezeaux Grand Cru',
+  '리쉬부르': 'Richebourg Grand Cru',
+  '보스네 로마네': 'Vosne-Romanée',
+  '부르고뉴 레 끌루 에메': "Domaine de Villaine Bourgogne Côte Chalonnaise 'Les Clous Aimé'"
+};
+
 function getWineEnglishName(koreanName) {
   if (!koreanName) return '';
-  let str = koreanName.trim();
-
-  const matchEn = str.match(/\(([^)]*[a-zA-Z]{3,}[^)]*)\)/);
+  const trimmed = koreanName.trim();
+  
+  if (MASTER_WINE_DICTIONARY[trimmed]) {
+    return MASTER_WINE_DICTIONARY[trimmed];
+  }
+  for (const [k, v] of Object.entries(MASTER_WINE_DICTIONARY)) {
+    if (trimmed.includes(k)) return v;
+  }
+  
+  const matchEn = trimmed.match(/\(([^)]*[a-zA-Z]{3,}[^)]*)\)/);
   if (matchEn) return matchEn[1].trim();
 
-  const EXACT_MAP = {
-    '씨네쿼넌': 'Sine Qua Non',
-    '사시까이아': 'Tenuta San Guido Sassicaia',
-    '사시카이아': 'Tenuta San Guido Sassicaia',
-    '샤또 무통 로칠드': 'Château Mouton Rothschild',
-    '페블레,비엥브뉘 바타르 몽라쉐 그랑 크뤼': 'Faiveley Bienvenues-Bâtard-Montrachet Grand Cru',
-    '프레스코발디,카스텔지오콘도 리제르바': 'Frescobaldi CastelGiocondo Brunello di Montalcino Riserva',
-    '오퍼스원': 'Opus One',
-    '오퍼스 원': 'Opus One',
-    '샤또 린치 바쥐': 'Château Lynch-Bages',
-    '샤또 린쉬 바쥬': 'Château Lynch-Bages',
-    '부샤 슈발리에 몽라쉐': 'Bouchard Père & Fils Chevalier-Montrachet Grand Cru',
-    '슈발리에 몽라쉐': 'Chevalier-Montrachet Grand Cru',
-    '바타르 몽라쉐': 'Bâtard-Montrachet Grand Cru',
-    '몽라쉐': 'Le Montrachet Grand Cru',
-    '로마네 꽁티': 'Domaine de la Romanée-Conti Romanée-Conti',
-    '로마네 생 비방': 'Romanée-Saint-Vivant Grand Cru',
-    '스크리밍 이글': 'Screaming Eagle Cabernet Sauvignon',
-    '알마비바': 'Viña Almaviva',
-    '샤또 마고': 'Château Margaux',
-    '샤또 라피트 로칠드': 'Château Lafite Rothschild',
-    '샤또 라투르': 'Château Latour',
-    '샤또 오브리옹': 'Château Haut-Brion',
-    '샤또 디켐': "Château d'Yquem",
-    '티냐넬로': 'Antinori Tignanello',
-    '솔라이아': 'Antinori Solaia',
-    '돔 페리뇽': 'Dom Pérignon Vintage Champagne',
-    '케이머스': 'Caymus Vineyards Cabernet Sauvignon',
-    '실버 오크': 'Silver Oak Napa Valley Cabernet Sauvignon',
-    '샤또 딸보': 'Château Talbot',
-  };
-
-  for (const [k, v] of Object.entries(EXACT_MAP)) {
-    if (str.includes(k)) return v;
-  }
-
-  const REPLACEMENTS = [
-    [/샤또|샤토/g, 'Château '],
-    [/도멘/g, 'Domaine '],
-    [/까베르네\s*소비뇽/g, 'Cabernet Sauvignon '],
-    [/피노\s*누아/g, 'Pinot Noir '],
-    [/샤르도네/g, 'Chardonnay '],
-    [/그랑\s*크뤼|그랜드\s*크루/g, 'Grand Cru '],
-    [/리저브|레제르바/g, 'Reserve '],
-  ];
-
-  let en = str;
-  for (const [rgx, replacement] of REPLACEMENTS) {
-    en = en.replace(rgx, replacement);
-  }
-  en = en.replace(/,/g, ', ').replace(/\s+/g, ' ').trim();
-  return en !== str ? en : `${str} Wine`;
+  return '';
 }
 
 function compressImageFile(file) {
@@ -93,8 +267,8 @@ function compressImageFile(file) {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 450;
-        const MAX_HEIGHT = 450;
+        const MAX_WIDTH = 500;
+        const MAX_HEIGHT = 500;
         let width = img.width;
         let height = img.height;
         if (width > height) {
@@ -160,7 +334,6 @@ export default function App() {
   const [editingEnglishWine, setEditingEnglishWine] = useState(null);
   const [inputEnglishName, setInputEnglishName] = useState('');
 
-  // 비고(메모) 수정 모달 상태
   const [editingNoteWine, setEditingNoteWine] = useState(null);
   const [inputNote, setInputNote] = useState('');
 
@@ -353,7 +526,6 @@ export default function App() {
     setInputEnglishName('');
   };
 
-  // 비고(메모) 저장 핸들러
   const handleSaveNote = async () => {
     if (!editingNoteWine) return;
     const trimmed = inputNote.trim();
@@ -558,7 +730,6 @@ export default function App() {
         const matchedWebIds = new Set();
         const excelWithMatch = [];
 
-        // 1차: 이름 + 빈티지 + 랙이 완벽 일치하는 항목 1:1 매칭
         excelRows.forEach((excelItem) => {
           const exactMatch = stockData.find(
             w => !matchedWebIds.has(w.id) &&
@@ -574,7 +745,6 @@ export default function App() {
           }
         });
 
-        // 2차: 실제 위치 이동 가능성이 있는 잔여 항목 매칭
         excelWithMatch.forEach((item) => {
           if (!item.match) {
             const looseMatch = stockData.find(
@@ -746,7 +916,7 @@ export default function App() {
       const matchSearch = item.name.toLowerCase().includes(term) ||
                           (item.englishName && item.englishName.toLowerCase().includes(term)) ||
                           item.vintage.toLowerCase().includes(term) ||
-                          item.note.toLowerCase().includes(term);
+                          (item.note && item.note.toLowerCase().includes(term));
       const matchRack = selectedRack === '전체' || item.rack === selectedRack;
       const matchCountry = selectedCountry === '전체' || item.country === selectedCountry;
       const matchVintage = selectedVintage === '전체' || item.vintage === selectedVintage;
@@ -766,14 +936,14 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
         <Wine className="w-10 h-10 text-rose-500 animate-bounce" />
-        <p className="text-sm font-medium">와인 데이터베이스 동기화 중...</p>
+        <p className="text-sm font-medium">프리미엄 와인 데이터베이스 연결 중...</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-28">
-      {/* 상단 헤더 */}
+      {/* 2단 헤더 */}
       <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-30 px-3.5 sm:px-6 py-2.5 sm:py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center justify-between gap-2">
@@ -787,7 +957,7 @@ export default function App() {
                   <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="실시간 클라우드 연결됨" />
                 </h1>
                 <p className="text-[10px] sm:text-xs text-emerald-400 truncate">
-                  실시간 양방향 동기화 활성화됨
+                  실시간 양방향 클라우드 동기화 중
                 </p>
               </div>
             </div>
@@ -851,38 +1021,38 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* 통계 카드 */}
+        {/* 상단 통계 */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
-          <div className="bg-slate-900/90 border border-slate-800 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl">
-            <span className="text-[10px] sm:text-xs text-slate-400 font-medium flex items-center gap-1">
-              <Wine className="w-3.5 h-3.5 text-rose-400 shrink-0" /> <span className="truncate">총 보관수량</span>
+          <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <Wine className="w-3.5 h-3.5 text-rose-400" /> 총 보관수량
             </span>
-            <p className="text-lg sm:text-2xl font-bold text-white mt-0.5 sm:mt-1 font-mono">
-              {stats.totalBottles.toLocaleString()}<span className="text-[11px] sm:text-sm font-normal text-slate-400 ml-0.5">병</span>
+            <p className="text-lg sm:text-2xl font-bold text-white mt-1 font-mono">
+              {stats.totalBottles.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-0.5">병</span>
             </p>
           </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl">
-            <span className="text-[10px] sm:text-xs text-slate-400 font-medium flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5 text-blue-400 shrink-0" /> <span className="truncate">와인 라벨</span>
+          <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5 text-blue-400" /> 와인 라벨
             </span>
-            <p className="text-lg sm:text-2xl font-bold text-white mt-0.5 sm:mt-1 font-mono">
-              {stats.totalTypes}<span className="text-[11px] sm:text-sm font-normal text-slate-400 ml-0.5">종</span>
+            <p className="text-lg sm:text-2xl font-bold text-white mt-1 font-mono">
+              {stats.totalTypes}<span className="text-xs font-normal text-slate-400 ml-0.5">종</span>
             </p>
           </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl">
-            <span className="text-[10px] sm:text-xs text-slate-400 font-medium flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" /> <span className="truncate">소진 품목</span>
+          <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl">
+            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> 소진 품목
             </span>
-            <p className="text-lg sm:text-2xl font-bold text-amber-400 mt-0.5 sm:mt-1 font-mono">
-              {stats.outOfStockCount}<span className="text-[11px] sm:text-sm font-normal text-slate-400 ml-0.5">개</span>
+            <p className="text-lg sm:text-2xl font-bold text-amber-400 mt-1 font-mono">
+              {stats.outOfStockCount}<span className="text-xs font-normal text-slate-400 ml-0.5">개</span>
             </p>
           </div>
         </div>
 
         {/* 랙 맵 */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-xl">
+        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xl">
           <div className="flex justify-between items-center">
             <button 
               onClick={() => setShowRackMap(!showRackMap)}
@@ -985,13 +1155,13 @@ export default function App() {
           )}
         </div>
 
-        {/* 검색 및 필터 바 */}
-        <div className="bg-slate-900/80 border border-slate-800 p-3 sm:p-4 rounded-xl sm:rounded-2xl space-y-3">
+        {/* 검색 및 필터 바 (국가, 빈티지 필터 나란히 배치) */}
+        <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl space-y-3">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="와인명(한글/영문), 빈티지, 비고 검색..."
+              placeholder="와인명(한글/영문), 빈티지, 비고 메모 검색..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500"
@@ -1033,130 +1203,163 @@ export default function App() {
           </div>
         </div>
 
-        {/* 카드 뷰 */}
+        {/* [개선된 호텔 셀러 스타일 미니멀 카드 뷰] */}
         {viewMode === 'grid' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredData.map((item) => {
-              const countryStyle = COUNTRY_INFO[item.country] || { flag: '🍷', color: 'from-slate-900 to-slate-950 border-slate-800' };
+              const countryStyle = COUNTRY_INFO[item.country] || { flag: '🍷', label: item.country };
               const searchTargetName = item.englishName || item.name;
               const vivinoSmartUrl = `https://www.google.com/search?q=${encodeURIComponent(searchTargetName + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`;
 
               return (
                 <div 
                   key={item.id} 
-                  className={`bg-gradient-to-b ${countryStyle.color} border rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between relative shadow-lg hover:border-rose-500/50 transition`}
+                  className="bg-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between shadow-xl transition relative group"
                 >
-                  <div className="flex gap-3 items-start">
-                    <div className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 rounded-xl bg-slate-950/80 border border-slate-700/80 overflow-hidden flex flex-col items-center justify-center relative group">
-                      {item.customImage ? (
-                        <div 
-                          onClick={() => setZoomedWine(item)}
-                          className="w-full h-full relative cursor-pointer flex items-center justify-center"
-                          title="클릭하여 사진 확대"
-                        >
-                          <img
-                            src={item.customImage}
-                            alt={item.name}
-                            className="w-full h-full object-contain p-1"
-                          />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-[11px] text-white font-semibold gap-1">
-                            <ZoomIn className="w-4 h-4" /> 확대
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setEditingImageWine(item)}
-                          className="w-full h-full flex flex-col items-center justify-center text-slate-500 hover:text-rose-400 transition gap-1 touch-manipulation"
-                          title="사진 등록"
-                        >
-                          <Camera className="w-5 h-5 opacity-70" />
-                          <span className="text-[10px] font-medium">+사진</span>
-                        </button>
-                      )}
+                  <div>
+                    {/* 1. 상단 미니멀 메타 바 (국가, 빈티지, 랙 위치) */}
+                    <div className="flex items-center justify-between text-xs pb-2.5 mb-3 border-b border-slate-800/60 text-slate-400">
+                      <div className="flex items-center gap-1.5">
+                        <span>{countryStyle.flag}</span>
+                        <span className="font-medium text-slate-300">{countryStyle.label}</span>
+                        <span className="text-slate-600">·</span>
+                        <span className="font-mono font-bold text-amber-300">{item.vintage}</span>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setEditingRackWine(item);
+                          setNewSelectedRack(item.rack);
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-[11px] font-medium transition touch-manipulation"
+                        title="터치하여 보관 랙 위치 이동"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        <span>{item.rack}</span>
+                        <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                      </button>
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-slate-200 flex items-center gap-1">
-                          <span>{countryStyle.flag}</span>
-                          <span>{item.country}</span>
-                        </span>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-black font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                          {item.vintage}
-                        </span>
-                        <button 
-                          onClick={() => {
-                            setEditingRackWine(item);
-                            setNewSelectedRack(item.rack);
-                          }}
-                          className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-950/60 text-rose-300 border border-rose-800/60 active:bg-rose-900 hover:border-rose-400 transition flex items-center gap-0.5 touch-manipulation"
-                          title="랙 위치 이동"
-                        >
-                          <span>📍 {item.rack}</span>
-                          <Edit3 className="w-2.5 h-2.5 opacity-60 ml-0.5" />
-                        </button>
-                      </div>
-
-                      <h3 className="font-bold text-white text-sm sm:text-base leading-snug tracking-tight line-clamp-2 mt-1">
-                        {item.name}
-                      </h3>
-
-                      <div 
-                        onClick={() => {
-                          setEditingEnglishWine(item);
-                          setInputEnglishName(item.englishName || '');
-                        }}
-                        className="cursor-pointer group flex items-center gap-1 mt-0.5"
-                        title="영문명 수정"
-                      >
-                        <p className="text-xs text-slate-400 italic font-serif leading-tight truncate group-hover:text-rose-300 transition">
-                          {item.englishName || '+ 영문명 입력'}
-                        </p>
-                        <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 shrink-0" />
-                      </div>
-
-                      {/* 비고 클릭 시 수정 모달 열림 */}
-                      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                        {item.note ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingNoteWine(item);
-                              setInputNote(item.note || '');
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:border-amber-400 active:bg-amber-500/20 transition truncate max-w-full touch-manipulation"
-                            title="클릭하여 비고(메모) 수정"
+                    {/* 2. 중앙 컨텐츠 (좌측 썸네일 + 우측 와인명 / 영문명 / 비고) */}
+                    <div className="flex gap-3.5 items-start">
+                      {/* 사진 썸네일 */}
+                      <div className="w-20 h-24 sm:w-22 sm:h-26 shrink-0 rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex flex-col items-center justify-center relative">
+                        {item.customImage ? (
+                          <div 
+                            onClick={() => setZoomedWine(item)}
+                            className="w-full h-full relative cursor-pointer flex items-center justify-center group/img"
+                            title="클릭하여 사진 확대"
                           >
-                            <span>🏷️ {item.note}</span>
-                            <Edit3 className="w-2.5 h-2.5 opacity-60 shrink-0" />
-                          </button>
+                            <img
+                              src={item.customImage}
+                              alt={item.name}
+                              className="w-full h-full object-contain p-1"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-[10px] text-white font-medium gap-0.5">
+                              <ZoomIn className="w-3.5 h-3.5" /> 확대
+                            </div>
+                          </div>
                         ) : (
                           <button
-                            type="button"
-                            onClick={() => {
-                              setEditingNoteWine(item);
-                              setInputNote('');
-                            }}
-                            className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-amber-300 transition touch-manipulation"
-                            title="비고(메모) 추가"
+                            onClick={() => setEditingImageWine(item)}
+                            className="w-full h-full flex flex-col items-center justify-center text-slate-500 hover:text-rose-400 transition gap-1 touch-manipulation"
+                            title="사진 등록"
                           >
-                            <Plus className="w-2.5 h-2.5" />
-                            <span>비고 추가</span>
+                            <Camera className="w-4 h-4 opacity-60" />
+                            <span className="text-[10px] font-medium">+사진</span>
                           </button>
                         )}
+                      </div>
+
+                      {/* 와인 이름 영역 */}
+                      <div className="flex-1 min-w-0">
+                        {/* 한글 와인명 */}
+                        <h3 className="font-bold text-white text-sm sm:text-base leading-snug tracking-tight line-clamp-2">
+                          {item.name}
+                        </h3>
+
+                        {/* 정통 영문 와인명 (클릭하여 수정 가능) */}
+                        <div 
+                          onClick={() => {
+                            setEditingEnglishWine(item);
+                            setInputEnglishName(item.englishName || '');
+                          }}
+                          className="cursor-pointer group/en flex items-center gap-1 mt-1"
+                          title="클릭하여 영문명 직접 수정"
+                        >
+                          <p className="text-xs text-slate-400 italic font-serif leading-snug line-clamp-2 group-hover/en:text-rose-300 transition">
+                            {item.englishName || '+ 영문명 입력'}
+                          </p>
+                          <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover/en:opacity-100 shrink-0" />
+                        </div>
+
+                        {/* 비고란 메모 (단정하고 은은한 라벨 스타일) */}
+                        <div className="mt-2">
+                          {item.note ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingNoteWine(item);
+                                setInputNote(item.note || '');
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:border-amber-500/50 hover:text-amber-300 transition truncate max-w-full touch-manipulation"
+                              title="비고(메모) 수정"
+                            >
+                              <span>🏷️ {item.note}</span>
+                              <Edit3 className="w-2.5 h-2.5 opacity-50 shrink-0" />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingNoteWine(item);
+                                setInputNote('');
+                              }}
+                              className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-slate-300 transition touch-manipulation"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                              <span>메모 추가</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-3">
-                    <div className="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800">
+                  {/* 3. 하단 컨트롤 바 (Vivino 평점 링크 & 단정한 재고 증감 카운터) */}
+                  <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between gap-2 mt-3.5">
+                    <div className="flex items-center gap-1.5">
+                      <a
+                        href={vivinoSmartUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-800 text-rose-300/90 hover:text-rose-300 rounded-xl text-xs font-semibold border border-slate-700/80 transition touch-manipulation"
+                        title="비비노 평점 바로보기"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Vivino 평점</span>
+                      </a>
+
+                      <button
+                        onClick={() => setEditingImageWine(item)}
+                        className="p-1.5 bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl border border-slate-700/60 transition touch-manipulation"
+                        title="사진 변경"
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* 재고 증감 카운터 */}
+                    <div className="flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800">
                       <button
                         onClick={() => handleQtyChange(item.id, -1, '출고')}
-                        className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-200 transition touch-manipulation"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-300 transition touch-manipulation"
+                        title="1병 출고"
                       >
-                        <Minus className="w-4 h-4" />
+                        <Minus className="w-3.5 h-3.5" />
                       </button>
-                      <div className="w-11 sm:w-12 text-center">
+
+                      <div className="w-11 text-center">
                         <span className={`text-base font-black font-mono block leading-none ${
                           item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
                         }`}>
@@ -1164,31 +1367,14 @@ export default function App() {
                         </span>
                         <span className="text-[9px] text-slate-500 block mt-0.5 font-sans">현재고</span>
                       </div>
+
                       <button
                         onClick={() => handleQtyChange(item.id, 1, '입고')}
-                        className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-200 transition touch-manipulation"
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-300 transition touch-manipulation"
+                        title="1병 입고"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-3.5 h-3.5" />
                       </button>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setEditingImageWine(item)}
-                        className="p-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 touch-manipulation"
-                      >
-                        <Camera className="w-4 h-4" />
-                      </button>
-
-                      <a
-                        href={vivinoSmartUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 active:bg-rose-950/60 text-slate-300 rounded-xl text-xs font-semibold border border-slate-700 transition touch-manipulation"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-rose-400" />
-                        <span>비비노평점</span>
-                      </a>
                     </div>
                   </div>
                 </div>
@@ -1199,7 +1385,7 @@ export default function App() {
 
         {/* 테이블 뷰 */}
         {viewMode === 'table' && (
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl sm:rounded-2xl overflow-hidden shadow-xl">
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
             <div className="sm:hidden px-3 py-2 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400">
               👉 좌우로 밀어 전체 컬럼을 확인하세요
             </div>
@@ -1267,7 +1453,7 @@ export default function App() {
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleQtyChange(item.id, -1, '출고')}
-                            className="w-7 h-7 rounded bg-slate-800 text-slate-200 flex items-center justify-center"
+                            className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
@@ -1278,7 +1464,7 @@ export default function App() {
                           </span>
                           <button
                             onClick={() => handleQtyChange(item.id, 1, '입고')}
-                            className="w-7 h-7 rounded bg-slate-800 text-slate-200 flex items-center justify-center"
+                            className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -1291,7 +1477,7 @@ export default function App() {
                             setEditingNoteWine(item);
                             setInputNote(item.note || '');
                           }}
-                          className="text-left text-amber-300/80 hover:text-amber-300 truncate w-full flex items-center justify-between gap-1 group"
+                          className="text-left text-slate-300 hover:text-amber-300 truncate w-full flex items-center justify-between gap-1 group"
                           title="클릭하여 비고 수정"
                         >
                           <span className="truncate">{item.note || '-'}</span>
@@ -1346,7 +1532,7 @@ export default function App() {
                 autoFocus
               />
               <p className="text-[11px] text-slate-500">
-                * 공백으로 비워두고 저장하시면 비고 태그가 삭제됩니다.
+                * 공백으로 비워두고 저장하시면 비고 라벨이 삭제됩니다.
               </p>
             </div>
 
@@ -1507,7 +1693,6 @@ export default function App() {
                   <span className="text-[10px] text-slate-400 block flex items-center justify-between">보관 랙 <Edit3 className="w-2.5 h-2.5 text-rose-400" /></span>
                   <span className="font-bold text-rose-400 text-sm">📍 {zoomedWine.rack}</span>
                 </div>
-                {/* 사진 확대 모달에서도 비고 확인 및 터치 수정 지원 */}
                 <div 
                   onClick={() => {
                     const target = zoomedWine;
@@ -1520,7 +1705,7 @@ export default function App() {
                   <span className="text-[10px] text-slate-400 flex items-center justify-between">
                     비고 / 메모 <Edit3 className="w-2.5 h-2.5 text-amber-400" />
                   </span>
-                  <span className="font-medium text-amber-300 text-xs truncate block mt-0.5">
+                  <span className="font-medium text-slate-200 text-xs truncate block mt-0.5">
                     {zoomedWine.note ? `🏷️ ${zoomedWine.note}` : '등록된 비고가 없습니다 (터치하여 입력)'}
                   </span>
                 </div>
@@ -1603,10 +1788,10 @@ export default function App() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">영문 와인명 (선택)</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">영문 와인명 (선택, 비워두면 자동 완성)</label>
                 <input
                   type="text"
-                  placeholder="예: Opus One"
+                  placeholder="예: Opus One, Château Margaux"
                   value={newWineForm.englishName}
                   onChange={(e) => setNewWineForm({ ...newWineForm, englishName: e.target.value })}
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif placeholder-slate-500 focus:outline-none focus:border-rose-500"
