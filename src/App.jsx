@@ -3,7 +3,8 @@ import * as XLSX from 'xlsx';
 import { 
   Wine, Search, Layers, AlertTriangle, Upload, Download,
   MapPin, ExternalLink, LayoutGrid, Table, Plus, Minus, 
-  Grid3X3, History, RotateCcw, X, Camera, RefreshCw, ChevronDown, ChevronUp, Box, PlusCircle
+  Grid3X3, History, RotateCcw, X, Camera, RefreshCw, 
+  ChevronDown, ChevronUp, Box, PlusCircle, Image as ImageIcon, Trash2, Link as LinkIcon
 } from 'lucide-react';
 
 const COUNTRY_INFO = {
@@ -22,6 +23,45 @@ const COMMON_RACKS = [
   '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
 ];
 
+// 스마트폰 대용량 사진을 20~30KB 크기로 초경량 압축하는 캔버스 압축기
+function compressImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 400;
+        const MAX_HEIGHT = 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function App() {
   const [stockData, setStockData] = useState([]);
   const [historyLogs, setHistoryLogs] = useState(() => {
@@ -39,7 +79,11 @@ export default function App() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // 신규 와인 등록 폼 상태
+  // 이미지 등록 모달 상태
+  const [editingImageWine, setEditingImageWine] = useState(null);
+  const [inputImageUrl, setInputImageUrl] = useState('');
+
+  // 신규 와인 폼 상태
   const [newWineForm, setNewWineForm] = useState({
     country: '프랑스',
     name: '',
@@ -50,7 +94,7 @@ export default function App() {
     note: '',
   });
 
-  // 접속 시 서버의 기본 엑셀 자동 로드
+  // 초기 엑셀 데이터 동기화
   useEffect(() => {
     const savedStock = localStorage.getItem('seouloil_wine_stock');
     if (savedStock) {
@@ -93,7 +137,7 @@ export default function App() {
             currentQty: Number(r[6]) || 0,
             status: String(r[7] || '정상').trim(),
             note: String(r[8] || '').trim(),
-            customImage: null,
+            customImage: r[9] ? String(r[9]).trim() : null,
           }));
 
         setStockData(parsed);
@@ -107,14 +151,21 @@ export default function App() {
       });
   }, []);
 
+  // 로컬 스토리지 실시간 영구 저장
   useEffect(() => {
     if (stockData.length > 0) {
-      localStorage.setItem('seouloil_wine_stock', JSON.stringify(stockData));
+      try {
+        localStorage.setItem('seouloil_wine_stock', JSON.stringify(stockData));
+      } catch (err) {
+        console.error('용량 초과 발생 방지:', err);
+      }
     }
   }, [stockData]);
 
   useEffect(() => {
-    localStorage.setItem('seouloil_wine_logs', JSON.stringify(historyLogs));
+    try {
+      localStorage.setItem('seouloil_wine_logs', JSON.stringify(historyLogs));
+    } catch (err) {}
   }, [historyLogs]);
 
   // 수량 증감 핸들러 (+ / -)
@@ -159,7 +210,7 @@ export default function App() {
     }));
   };
 
-  // 모바일 현장 와인 신규 등록 핸들러
+  // 모바일 현장 와인 신규 추가
   const handleAddNewWine = (e) => {
     e.preventDefault();
     if (!newWineForm.name.trim()) {
@@ -206,11 +257,9 @@ export default function App() {
       reason: '모바일 현장 신규 입고'
     };
 
-    // 최신 등록 품목을 화면 맨 위에 배치
     setStockData(prev => [newWine, ...prev]);
     setHistoryLogs(prev => [addLog, ...prev]);
 
-    // 폼 초기화 및 닫기
     setNewWineForm({
       country: '프랑스',
       name: '',
@@ -221,6 +270,28 @@ export default function App() {
       note: '',
     });
     setShowAddModal(false);
+  };
+
+  // 이미지 저장 처리 (URL 또는 압축 Base64)
+  const handleSaveImage = (imgData) => {
+    if (!editingImageWine) return;
+    setStockData(prev => prev.map(item => 
+      item.id === editingImageWine.id ? { ...item, customImage: imgData } : item
+    ));
+    setEditingImageWine(null);
+    setInputImageUrl('');
+  };
+
+  // 이미지 파일 업로드 & 초경량 자동 압축
+  const handleImageFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const compressedDataUrl = await compressImageFile(file);
+      handleSaveImage(compressedDataUrl);
+    } catch (err) {
+      alert('이미지 압축 및 등록 중 오류가 발생했습니다.');
+    }
   };
 
   // 실행 취소 (Undo)
@@ -238,16 +309,6 @@ export default function App() {
       return item;
     }));
     setHistoryLogs(prev => prev.filter(l => l.logId !== log.logId));
-  };
-
-  // 실물 사진 업로드
-  const handleImageUpload = (id, file) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setStockData(prev => prev.map(item => item.id === id ? { ...item, customImage: e.target.result } : item));
-    };
-    reader.readAsDataURL(file);
   };
 
   // 파일 수동 교체 업로드
@@ -282,7 +343,7 @@ export default function App() {
           currentQty: Number(r[6]) || 0,
           status: String(r[7] || '정상').trim(),
           note: String(r[8] || '').trim(),
-          customImage: null,
+          customImage: r[9] ? String(r[9]).trim() : null,
         }));
 
       setStockData(parsed);
@@ -293,26 +354,27 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // 초기 엑셀 원본으로 리셋
+  // 초기화
   const handleResetToDefault = () => {
-    if (!window.confirm('기본 엑셀 파일 상태로 되돌리시겠습니까? (수정한 재고와 이력이 초기화됩니다)')) return;
+    if (!window.confirm('기본 엑셀 상태로 되돌리시겠습니까? (직접 등록한 와인, 이미지, 수량 변경이 초기화됩니다)')) return;
     localStorage.removeItem('seouloil_wine_stock');
     localStorage.removeItem('seouloil_wine_logs');
     window.location.reload();
   };
 
-  // 수정본 엑셀 파일 다운로드
+  // 수정본 엑셀 다운로드 (이미지 URL 보존)
   const handleDownloadExcel = () => {
     if (stockData.length === 0) return;
 
     const stockSheetData = [
       ['와 인 재 고 현 황'],
-      ['원산지', '와인명', '빈티지', '보관위치', '총 입고량', '총 출고량', '현재고', '상태', '비고']
+      ['원산지', '와인명', '빈티지', '보관위치', '총 입고량', '총 출고량', '현재고', '상태', '비고', '이미지링크']
     ];
     stockData.forEach(item => {
       stockSheetData.push([
         item.country, item.name, item.vintage, item.rack,
-        item.inQty, item.outQty, item.currentQty, item.status, item.note
+        item.inQty, item.outQty, item.currentQty, item.status, item.note,
+        item.customImage && item.customImage.startsWith('http') ? item.customImage : ''
       ]);
     });
 
@@ -407,7 +469,7 @@ export default function App() {
 
           {/* 우측 상단 기능 버튼 그룹 */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* 1. 모바일 현장 와인 추가 버튼 */}
+            {/* 와인추가 */}
             <button
               onClick={() => setShowAddModal(true)}
               className="flex items-center gap-1 px-2.5 sm:px-3.5 py-2 bg-rose-600 active:bg-rose-700 hover:bg-rose-500 text-white rounded-xl text-xs sm:text-sm font-bold transition shadow-md shadow-rose-950/50 touch-manipulation"
@@ -416,7 +478,7 @@ export default function App() {
               <span>와인추가</span>
             </button>
 
-            {/* 2. 변경 이력 버튼 */}
+            {/* 변경 이력 */}
             <button
               onClick={() => setShowLogModal(true)}
               className="relative flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -430,7 +492,7 @@ export default function App() {
               )}
             </button>
 
-            {/* 3. 엑셀다운 버튼 */}
+            {/* 엑셀다운 */}
             <button
               onClick={handleDownloadExcel}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40 touch-manipulation"
@@ -440,7 +502,7 @@ export default function App() {
               <span>엑셀다운</span>
             </button>
 
-            {/* 4. 초기화 버튼 */}
+            {/* 초기화 */}
             <button
               onClick={handleResetToDefault}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -450,7 +512,7 @@ export default function App() {
               <span>초기화</span>
             </button>
 
-            {/* 5. 새 파일 업로드 */}
+            {/* 새 파일 */}
             <label className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer transition touch-manipulation">
               <Upload className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">새 파일</span>
@@ -587,7 +649,7 @@ export default function App() {
           )}
         </div>
 
-        {/* 필터 검색 바 */}
+        {/* 검색 및 필터 바 */}
         <div className="bg-slate-900/80 border border-slate-800 p-3 sm:p-4 rounded-xl sm:rounded-2xl space-y-3">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -653,7 +715,7 @@ export default function App() {
           <span>보관 재고: <strong className="text-rose-400 font-bold">{filteredData.reduce((a, c) => a + c.currentQty, 0)}</strong>병</span>
         </div>
 
-        {/* 1. 부티크 라벨 카드 뷰 */}
+        {/* 1. 부티크 라벨 카드 뷰 (이미지 전면 출력 & 원클릭 사진 등록) */}
         {viewMode === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
             {filteredData.length === 0 ? (
@@ -671,6 +733,7 @@ export default function App() {
                     className={`bg-gradient-to-b ${countryStyle.color} border rounded-2xl p-4 sm:p-5 flex flex-col justify-between relative shadow-lg hover:border-rose-500/50 transition`}
                   >
                     <div>
+                      {/* 상단 라벨 헤더 */}
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-900/90 border border-slate-700 text-slate-200 flex items-center gap-1.5 shadow-sm">
                           <span>{countryStyle.flag}</span>
@@ -687,10 +750,37 @@ export default function App() {
                         </div>
                       </div>
 
-                      <h3 className="font-bold text-white text-base sm:text-lg leading-snug tracking-tight my-2 min-h-[3rem] flex items-center">
+                      {/* 이미지 표시 공간 (등록된 사진이 있을 때 vs 없을 때) */}
+                      {item.customImage ? (
+                        <div 
+                          onClick={() => setEditingImageWine(item)}
+                          className="relative aspect-[16/10] rounded-xl overflow-hidden my-2.5 bg-slate-950/80 border border-slate-700 flex items-center justify-center cursor-pointer group"
+                        >
+                          <img 
+                            src={item.customImage} 
+                            alt={item.name} 
+                            className="max-h-full object-contain drop-shadow-md group-hover:scale-105 transition"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-xs text-white gap-1 font-semibold">
+                            <Camera className="w-4 h-4" /> 변경하기
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setEditingImageWine(item)}
+                          className="w-full aspect-[16/8] rounded-xl my-2.5 border border-dashed border-slate-700/80 bg-slate-950/30 hover:bg-slate-850 hover:border-rose-500/50 transition flex flex-col items-center justify-center gap-1.5 text-slate-400 hover:text-rose-300"
+                        >
+                          <ImageIcon className="w-5 h-5 opacity-70" />
+                          <span className="text-xs font-medium">+ 사진 / 라벨 등록 (자동검색)</span>
+                        </button>
+                      )}
+
+                      {/* 와인 이름 */}
+                      <h3 className="font-bold text-white text-base sm:text-lg leading-snug tracking-tight my-1.5 min-h-[2.75rem] flex items-center">
                         {item.name}
                       </h3>
 
+                      {/* 비고 */}
                       {item.note && (
                         <div className="mb-2">
                           <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
@@ -698,20 +788,9 @@ export default function App() {
                           </span>
                         </div>
                       )}
-
-                      {item.customImage && (
-                        <div className="relative aspect-video rounded-xl overflow-hidden my-2 border border-slate-700">
-                          <img src={item.customImage} alt={item.name} className="w-full h-full object-cover" />
-                          <button
-                            onClick={() => handleImageUpload(item.id, null)}
-                            className="absolute top-1 right-1 p-1 bg-slate-900/80 rounded-full text-slate-300 hover:text-white"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      )}
                     </div>
 
+                    {/* 하단 수량 컨트롤러 */}
                     <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-2">
                       <div className="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800">
                         <button
@@ -739,15 +818,13 @@ export default function App() {
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <label className="p-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 cursor-pointer touch-manipulation" title="실물 사진 촬영/등록">
+                        <button
+                          onClick={() => setEditingImageWine(item)}
+                          className="p-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 touch-manipulation"
+                          title="사진 등록 / 변경"
+                        >
                           <Camera className="w-4 h-4" />
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={(e) => handleImageUpload(item.id, e.target.files[0])} 
-                            className="hidden" 
-                          />
-                        </label>
+                        </button>
 
                         <a
                           href={vivinoUrl}
@@ -777,6 +854,7 @@ export default function App() {
               <table className="w-full text-left text-xs sm:text-sm border-collapse whitespace-nowrap">
                 <thead className="bg-slate-950 text-slate-400 text-xs uppercase border-b border-slate-800">
                   <tr>
+                    <th className="px-3 sm:px-4 py-3 font-semibold">사진</th>
                     <th className="px-3 sm:px-4 py-3 font-semibold">원산지</th>
                     <th className="px-3 sm:px-5 py-3 font-semibold">와인명</th>
                     <th className="px-2 sm:px-3 py-3 font-semibold text-center">빈티지</th>
@@ -789,6 +867,23 @@ export default function App() {
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredData.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-800/40 transition">
+                      <td className="px-3 sm:px-4 py-2">
+                        {item.customImage ? (
+                          <img 
+                            src={item.customImage} 
+                            alt={item.name} 
+                            onClick={() => setEditingImageWine(item)}
+                            className="w-9 h-9 object-contain rounded bg-slate-950 border border-slate-700 cursor-pointer" 
+                          />
+                        ) : (
+                          <button
+                            onClick={() => setEditingImageWine(item)}
+                            className="w-9 h-9 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 hover:text-white"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
                       <td className="px-3 sm:px-4 py-3 text-slate-400">{item.country}</td>
                       <td className="px-3 sm:px-5 py-3 font-medium text-white max-w-xs truncate">{item.name}</td>
                       <td className="px-2 sm:px-3 py-3 text-slate-300 text-center font-mono">{item.vintage}</td>
@@ -837,6 +932,82 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* 이미지 등록 / 자동검색 팝업 모달 */}
+      {editingImageWine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base">와인 사진 등록 및 검색</h3>
+                <p className="text-xs text-rose-400 mt-0.5 truncate max-w-xs">{editingImageWine.name} ({editingImageWine.vintage})</p>
+              </div>
+              <button onClick={() => setEditingImageWine(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 방법 1: 구글 이미지 자동 검색 바로가기 */}
+            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <span className="text-xs font-semibold text-slate-300 block">방법 1. 구글에서 실물 라벨 사진 찾기</span>
+              <p className="text-[11px] text-slate-400">버튼을 누르면 해당 와인의 사진 검색 결과가 바로 열립니다. 마음에 드는 사진을 꾹 눌러 '이미지 주소 복사'를 해주세요.</p>
+              <a
+                href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(editingImageWine.name + ' ' + (editingImageWine.vintage !== 'NV' ? editingImageWine.vintage : '') + ' wine bottle label')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>구글 이미지에서 이 와인 검색하기</span>
+              </a>
+            </div>
+
+            {/* 방법 2: 복사한 이미지 웹 주소(URL) 붙여넣기 */}
+            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <span className="text-xs font-semibold text-slate-300 block">방법 2. 복사한 이미지 주소(URL) 붙여넣기</span>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="https://... 이미지 주소 붙여넣기"
+                  value={inputImageUrl}
+                  onChange={(e) => setInputImageUrl(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => inputImageUrl.trim() && handleSaveImage(inputImageUrl.trim())}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold shrink-0 transition"
+                >
+                  적용
+                </button>
+              </div>
+            </div>
+
+            {/* 방법 3: 휴대폰으로 실물 사진 촬영 / 앨범 업로드 */}
+            <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+              <span className="text-xs font-semibold text-slate-300 block">방법 3. 직접 스마트폰 카메라로 촬영 / 파일 선택</span>
+              <p className="text-[11px] text-slate-400">사진이 자동으로 20KB 크기로 초경량 압축되어 브라우저에 즉시 저장됩니다.</p>
+              <label className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
+                <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                <span>카메라 촬영 또는 앨범 사진 선택</span>
+                <input type="file" accept="image/*" onChange={handleImageFileUpload} className="hidden" />
+              </label>
+            </div>
+
+            {/* 기존 사진 삭제 */}
+            {editingImageWine.customImage && (
+              <button
+                type="button"
+                onClick={() => handleSaveImage(null)}
+                className="w-full py-2 text-red-400 hover:bg-red-950/30 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>현재 등록된 사진 삭제하기</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 모바일 현장 와인 신규 추가 모달 */}
       {showAddModal && (
