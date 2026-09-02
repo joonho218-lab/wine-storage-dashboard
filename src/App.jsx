@@ -449,7 +449,8 @@ export default function App() {
       const res = await fetch('/wine_data.xlsx');
       const ab = await res.arrayBuffer();
       const wb = XLSX.read(ab, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0]];
+      const sheetName = wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
       const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
       let headerIdx = rawData.findIndex(r => r && r.includes('와인명'));
@@ -493,7 +494,8 @@ export default function App() {
       try {
         const bstr = evt.target.result;
         const wb = XLSX.read(bstr, { type: 'binary' });
-        const ws = wb.Sheets[wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0]];
+        const sheetName = wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
         const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
         let headerIdx = rawData.findIndex(r => r && r.includes('와인명'));
@@ -559,10 +561,20 @@ export default function App() {
     XLSX.writeFile(newWb, `서울석유_와인창고_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
+  // 랙별 재고 수량 계산
   const rackCountMap = useMemo(() => {
     const map = {};
     stockData.forEach(item => { map[item.rack] = (map[item.rack] || 0) + item.currentQty; });
     return map;
+  }, [stockData]);
+
+  // 천장, 박스, 기타 보관 구역 동적 분류 (1~27번 및 중앙랙 제외한 모든 실제 위치)
+  const specialRacks = useMemo(() => {
+    const unique = Array.from(new Set(stockData.map(item => item.rack))).filter(Boolean);
+    const wallRacks = Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`);
+    const centerRacks = ['중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)'];
+    
+    return unique.filter(r => !wallRacks.includes(r) && !centerRacks.includes(r));
   }, [stockData]);
 
   const countryList = useMemo(() => {
@@ -602,11 +614,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-28">
-      {/* 2단 반응형 헤더 (스마트폰에서는 2줄 깔끔 분리, PC에서는 1줄 유지) */}
+      {/* 2단 반응형 헤더 */}
       <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-30 px-3.5 sm:px-6 py-2.5 sm:py-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4">
-          
-          {/* 1단 (모바일) / 좌측 (PC): 로고 + 타이틀 + 모바일용 와인추가 버튼 */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="p-2 bg-rose-600/20 text-rose-500 rounded-xl border border-rose-500/30 shrink-0">
@@ -623,7 +633,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* 모바일 화면 상단 우측: 강조된 [+ 와인추가] 버튼 */}
             <button
               onClick={() => setShowAddModal(true)}
               className="sm:hidden flex items-center gap-1 px-3 py-1.5 bg-rose-600 active:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-950/50 shrink-0 touch-manipulation"
@@ -633,9 +642,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* 2단 (모바일: 4분할 바둑판) / 우측 (PC: 1줄 인라인 버튼 그룹) */}
           <div className="grid grid-cols-4 sm:flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* PC 전용 [+ 와인추가] 버튼 */}
             <button
               onClick={() => setShowAddModal(true)}
               className="hidden sm:flex items-center gap-1 px-3.5 py-2 bg-rose-600 active:bg-rose-700 hover:bg-rose-500 text-white rounded-xl text-sm font-bold shadow-md shadow-rose-950/50 touch-manipulation"
@@ -644,7 +651,6 @@ export default function App() {
               <span>와인추가</span>
             </button>
 
-            {/* 1. 이력 */}
             <button
               onClick={() => setShowLogModal(true)}
               className="relative flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-slate-800 active:bg-slate-700 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -658,7 +664,6 @@ export default function App() {
               )}
             </button>
 
-            {/* 2. 엑셀다운 */}
             <button
               onClick={handleDownloadExcel}
               className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-emerald-600/90 active:bg-emerald-700 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40 touch-manipulation"
@@ -668,7 +673,6 @@ export default function App() {
               <span>엑셀다운</span>
             </button>
 
-            {/* 3. 초기화 */}
             <button
               onClick={handleResetToDefault}
               className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-slate-800 active:bg-slate-700 hover:bg-slate-650 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -678,7 +682,6 @@ export default function App() {
               <span>초기화</span>
             </button>
 
-            {/* 4. 새 파일 (엑셀 업로드) */}
             <label className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer transition touch-manipulation" title="새 엑셀 파일로 클라우드 덮어쓰기">
               <Upload className="w-3.5 h-3.5" />
               <span>새 파일</span>
@@ -719,7 +722,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 랙 바둑판 미니맵 */}
+        {/* 2층 창고 랙(Rack) 구조 맵 (벽면 + 중앙랙 + 천장/박스 전체 복원) */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-xl">
           <div className="flex justify-between items-center">
             <button 
@@ -728,7 +731,7 @@ export default function App() {
             >
               <Grid3X3 className="w-4 h-4 text-rose-500 shrink-0" />
               <div className="flex-1 min-w-0">
-                <span className="text-xs sm:text-sm font-bold text-white block">2층 창고 랙(Rack) 구조 맵</span>
+                <span className="text-xs sm:text-sm font-bold text-white block">2층 창고 랙(Rack) 전체 구조 맵</span>
                 <span className="text-[10px] sm:text-xs text-slate-400">
                   {selectedRack === '전체' ? '터치하여 랙별 빠른 필터링' : `[${selectedRack}] 선택됨`}
                 </span>
@@ -741,7 +744,7 @@ export default function App() {
           </div>
 
           {showRackMap && (
-            <div className="space-y-3 pt-3 mt-3 border-t border-slate-800">
+            <div className="space-y-4 pt-3.5 mt-3 border-t border-slate-800">
               {selectedRack !== '전체' && (
                 <div className="flex justify-end">
                   <button onClick={() => setSelectedRack('전체')} className="text-xs text-rose-400 font-semibold hover:underline">
@@ -749,8 +752,10 @@ export default function App() {
                   </button>
                 </div>
               )}
+
+              {/* 1. 외곽 벽면 랙 (1번 ~ 27번) */}
               <div>
-                <span className="text-[10px] text-slate-400 uppercase font-semibold block mb-2">외곽 벽면 랙 (1번 ~ 27번)</span>
+                <span className="text-[11px] text-slate-400 font-semibold block mb-2">🧱 외곽 벽면 랙 (1번 ~ 27번)</span>
                 <div className="grid grid-cols-4 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-14 gap-1.5">
                   {Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`).map(r => {
                     const count = rackCountMap[r] || 0;
@@ -765,6 +770,56 @@ export default function App() {
                       >
                         <span className="text-[11px] font-bold leading-tight">{r.replace('번랙', '')}번</span>
                         <span className="text-[10px] font-mono opacity-80">{count}병</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. 중앙 통로 랙 (1번줄 ~ 6번줄) */}
+              <div>
+                <span className="text-[11px] text-blue-400 font-semibold block mb-2">🏢 중앙 통로 랙 (1번줄 ~ 6번줄)</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 sm:gap-2">
+                  {['중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)'].map(r => {
+                    const count = rackCountMap[r] || 0;
+                    const isSelected = selectedRack === r;
+                    return (
+                      <button
+                        key={r}
+                        onClick={() => setSelectedRack(isSelected ? '전체' : r)}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold transition border flex items-center justify-between gap-1.5 touch-manipulation ${
+                          isSelected ? 'bg-rose-600 border-rose-400 text-white shadow-md' : count > 0 ? 'bg-slate-800/90 border-slate-700 text-slate-200' : 'bg-slate-900/40 border-slate-800 text-slate-600'
+                        }`}
+                      >
+                        <span className="truncate">{r.replace('중앙랙', '중앙')}</span>
+                        <span className={`font-mono text-[11px] font-bold shrink-0 ${isSelected ? 'text-white' : 'text-blue-400'}`}>
+                          {count}병
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. 천장 및 박스 / 특수 보관 구역 */}
+              <div>
+                <span className="text-[11px] text-amber-400 font-semibold block mb-2">📦 천장 및 박스 / 특수 보관</span>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  {specialRacks.map(r => {
+                    const count = rackCountMap[r] || 0;
+                    const isSelected = selectedRack === r;
+                    return (
+                      <button
+                        key={r}
+                        onClick={() => setSelectedRack(isSelected ? '전체' : r)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition border flex items-center gap-1.5 touch-manipulation ${
+                          isSelected ? 'bg-rose-600 border-rose-400 text-white shadow-md' : count > 0 ? 'bg-slate-800/90 border-slate-700 text-slate-200' : 'bg-slate-900/40 border-slate-800 text-slate-600'
+                        }`}
+                      >
+                        <span>📍 {r}</span>
+                        <span className={`font-mono text-[11px] font-bold ${isSelected ? 'text-white' : 'text-amber-400'}`}>
+                          ({count}병)
+                        </span>
                       </button>
                     );
                   })}
@@ -828,7 +883,6 @@ export default function App() {
                   className={`bg-gradient-to-b ${countryStyle.color} border rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between relative shadow-lg hover:border-rose-500/50 transition`}
                 >
                   <div className="flex gap-3 items-start">
-                    {/* 사진 썸네일 (누르면 확대 모달) */}
                     <div className="w-20 h-24 sm:w-24 sm:h-28 shrink-0 rounded-xl bg-slate-950/80 border border-slate-700/80 overflow-hidden flex flex-col items-center justify-center relative group">
                       {item.customImage ? (
                         <div 
@@ -857,7 +911,6 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* 와인 핵심 정보 (한글명 주 / 영문명 부) */}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 mb-1">
                         <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-900/90 border border-slate-700 text-slate-200 flex items-center gap-1">
@@ -892,7 +945,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* 하단 재고 버튼 */}
                   <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-3">
                     <div className="flex items-center bg-slate-950/90 p-1 rounded-xl border border-slate-800">
                       <button
@@ -1039,7 +1091,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 사진 원터치 확대 모달 */}
+      {/* 사진 확대 모달 */}
       {zoomedWine && (
         <div 
           onClick={() => setZoomedWine(null)}
@@ -1183,7 +1235,7 @@ export default function App() {
 
             <form onSubmit={handleAddNewWine} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">와인명 (한글 입력 시 영문명 자동 생성) *</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">와인명 *</label>
                 <input
                   type="text"
                   required
