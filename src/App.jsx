@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { 
   Wine, Search, Layers, AlertTriangle, Upload, Download,
   MapPin, ExternalLink, LayoutGrid, Table, Plus, Minus, 
-  Grid3X3, History, RotateCcw, X, Camera, RefreshCw, ChevronDown, ChevronUp, Box
+  Grid3X3, History, RotateCcw, X, Camera, RefreshCw, ChevronDown, ChevronUp, Box, PlusCircle
 } from 'lucide-react';
 
 const COUNTRY_INFO = {
@@ -15,6 +15,12 @@ const COUNTRY_INFO = {
   '칠레': { flag: '🇨🇱', color: 'from-rose-950/40 to-slate-900 border-rose-500/30' },
   '포르투갈': { flag: '🇵🇹', color: 'from-orange-950/40 to-slate-900 border-orange-500/30' },
 };
+
+const COMMON_RACKS = [
+  ...Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`),
+  '중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)',
+  '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
+];
 
 export default function App() {
   const [stockData, setStockData] = useState([]);
@@ -31,6 +37,18 @@ export default function App() {
   const [viewMode, setViewMode] = useState('grid');
   const [showRackMap, setShowRackMap] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // 신규 와인 등록 폼 상태
+  const [newWineForm, setNewWineForm] = useState({
+    country: '프랑스',
+    name: '',
+    vintage: 'NV',
+    rack: '1번랙',
+    customRack: '',
+    qty: 1,
+    note: '',
+  });
 
   // 접속 시 서버의 기본 엑셀 자동 로드
   useEffect(() => {
@@ -141,6 +159,70 @@ export default function App() {
     }));
   };
 
+  // 모바일 현장 와인 신규 등록 핸들러
+  const handleAddNewWine = (e) => {
+    e.preventDefault();
+    if (!newWineForm.name.trim()) {
+      alert('와인명을 입력해 주세요.');
+      return;
+    }
+
+    const targetRack = newWineForm.rack === '직접입력' 
+      ? (newWineForm.customRack.trim() || '미지정') 
+      : newWineForm.rack;
+
+    const newWineId = Date.now();
+    const initialQty = Math.max(1, Number(newWineForm.qty) || 1);
+
+    const newWine = {
+      id: newWineId,
+      country: newWineForm.country,
+      name: newWineForm.name.trim(),
+      vintage: newWineForm.vintage.trim() || 'NV',
+      rack: targetRack,
+      inQty: initialQty,
+      outQty: 0,
+      currentQty: initialQty,
+      status: '정상',
+      note: newWineForm.note.trim(),
+      customImage: null,
+    };
+
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+    const addLog = {
+      logId: Date.now() + Math.random(),
+      time: timeStr,
+      wineId: newWineId,
+      name: newWine.name,
+      vintage: newWine.vintage,
+      rack: newWine.rack,
+      country: newWine.country,
+      changeType: '신규등록 (+)',
+      delta: initialQty,
+      prevQty: 0,
+      newQty: initialQty,
+      reason: '모바일 현장 신규 입고'
+    };
+
+    // 최신 등록 품목을 화면 맨 위에 배치
+    setStockData(prev => [newWine, ...prev]);
+    setHistoryLogs(prev => [addLog, ...prev]);
+
+    // 폼 초기화 및 닫기
+    setNewWineForm({
+      country: '프랑스',
+      name: '',
+      vintage: 'NV',
+      rack: '1번랙',
+      customRack: '',
+      qty: 1,
+      note: '',
+    });
+    setShowAddModal(false);
+  };
+
   // 실행 취소 (Undo)
   const handleUndo = (log) => {
     setStockData(prev => prev.map(item => {
@@ -241,7 +323,7 @@ export default function App() {
     historyLogs.forEach(l => {
       ledgerSheetData.push([
         l.time,
-        l.changeType.includes('입고') ? '입고' : '출고',
+        l.changeType.includes('입고') || l.changeType.includes('등록') ? '입고' : '출고',
         l.country, l.name, l.vintage, l.rack,
         Math.abs(l.delta), l.reason, `재고변동: ${l.prevQty}병 ➔ ${l.newQty}병`
       ]);
@@ -325,7 +407,16 @@ export default function App() {
 
           {/* 우측 상단 기능 버튼 그룹 */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* 1. 변경 이력 버튼 */}
+            {/* 1. 모바일 현장 와인 추가 버튼 */}
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-1 px-2.5 sm:px-3.5 py-2 bg-rose-600 active:bg-rose-700 hover:bg-rose-500 text-white rounded-xl text-xs sm:text-sm font-bold transition shadow-md shadow-rose-950/50 touch-manipulation"
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[3]" />
+              <span>와인추가</span>
+            </button>
+
+            {/* 2. 변경 이력 버튼 */}
             <button
               onClick={() => setShowLogModal(true)}
               className="relative flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -339,7 +430,7 @@ export default function App() {
               )}
             </button>
 
-            {/* 2. 엑셀다운 버튼 */}
+            {/* 3. 엑셀다운 버튼 */}
             <button
               onClick={handleDownloadExcel}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-emerald-600 active:bg-emerald-700 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40 touch-manipulation"
@@ -349,7 +440,7 @@ export default function App() {
               <span>엑셀다운</span>
             </button>
 
-            {/* 3. 초기화 버튼 */}
+            {/* 4. 초기화 버튼 */}
             <button
               onClick={handleResetToDefault}
               className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
@@ -359,8 +450,8 @@ export default function App() {
               <span>초기화</span>
             </button>
 
-            {/* 4. 새 파일 업로드 */}
-            <label className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-rose-600 active:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-semibold cursor-pointer transition shadow-md shadow-rose-950/40 touch-manipulation">
+            {/* 5. 새 파일 업로드 */}
+            <label className="flex items-center gap-1 px-2.5 sm:px-3 py-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer transition touch-manipulation">
               <Upload className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">새 파일</span>
               <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
@@ -703,7 +794,7 @@ export default function App() {
                       <td className="px-2 sm:px-3 py-3 text-slate-300 text-center font-mono">{item.vintage}</td>
                       <td className="px-3 sm:px-4 py-3">
                         <span className="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-300 border border-slate-700">
-                              {item.rack}
+                          {item.rack}
                         </span>
                       </td>
                       <td className="px-3 sm:px-4 py-3">
@@ -747,6 +838,134 @@ export default function App() {
         )}
       </main>
 
+      {/* 모바일 현장 와인 신규 추가 모달 */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col">
+            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-rose-500" />
+                <h3 className="text-base sm:text-lg font-bold text-white">현장 와인 신규 등록</h3>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddNewWine} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">와인명 (필수) *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="예: 샤또 마고, 오퍼스 원, 케이머스 등"
+                  value={newWineForm.name}
+                  onChange={(e) => setNewWineForm({ ...newWineForm, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">생산국 / 원산지</label>
+                  <select
+                    value={newWineForm.country}
+                    onChange={(e) => setNewWineForm({ ...newWineForm, country: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500"
+                  >
+                    <option value="프랑스">🇫🇷 프랑스</option>
+                    <option value="미국">🇺🇸 미국</option>
+                    <option value="이탈리아">🇮🇹 이탈리아</option>
+                    <option value="스페인">🇪🇸 스페인</option>
+                    <option value="호주">🇦🇺 호주</option>
+                    <option value="칠레">🇨🇱 칠레</option>
+                    <option value="포르투갈">🇵🇹 포르투갈</option>
+                    <option value="기타">🍷 기타</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">빈티지 (연도)</label>
+                  <input
+                    type="text"
+                    placeholder="예: 2018 또는 NV"
+                    value={newWineForm.vintage}
+                    onChange={(e) => setNewWineForm({ ...newWineForm, vintage: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">보관 랙 위치</label>
+                  <select
+                    value={newWineForm.rack}
+                    onChange={(e) => setNewWineForm({ ...newWineForm, rack: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500"
+                  >
+                    {COMMON_RACKS.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">입고 수량 (병)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newWineForm.qty}
+                    onChange={(e) => setNewWineForm({ ...newWineForm, qty: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              {newWineForm.rack === '직접입력' && (
+                <div>
+                  <label className="block text-xs font-semibold text-rose-400 mb-1">보관 위치 직접 입력</label>
+                  <input
+                    type="text"
+                    placeholder="예: 창고 우측 코너 박스, 7층 임원실 등"
+                    value={newWineForm.customRack}
+                    onChange={(e) => setNewWineForm({ ...newWineForm, customRack: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-rose-500/50 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">비고 / 메모 (선택)</label>
+                <input
+                  type="text"
+                  placeholder="예: 매그넘 1500ml, 선물용 세트, 샴페인 등"
+                  value={newWineForm.note}
+                  onChange={(e) => setNewWineForm({ ...newWineForm, note: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-sm font-medium transition"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-rose-600 active:bg-rose-700 hover:bg-rose-500 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-rose-950/50"
+                >
+                  와인 등록 완료
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* 변경 이력 팝업 모달 */}
       {showLogModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -772,7 +991,11 @@ export default function App() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          log.changeType.includes('입고') ? 'bg-blue-500/20 text-blue-300' : 'bg-rose-500/20 text-rose-300'
+                          log.changeType.includes('등록') 
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : log.changeType.includes('입고') 
+                              ? 'bg-blue-500/20 text-blue-300' 
+                              : 'bg-rose-500/20 text-rose-300'
                         }`}>
                           {log.changeType}
                         </span>
