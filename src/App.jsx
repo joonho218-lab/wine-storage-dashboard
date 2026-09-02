@@ -9,7 +9,6 @@ import {
   ZoomIn, Edit3, MapPin, AlertCircle, Check
 } from 'lucide-react';
 
-// Windows PC에서도 국기가 깨지지 않고 완벽하게 출력되도록 국가별 코드(ISO-2) 매핑
 const COUNTRY_INFO = {
   '프랑스': { code: 'fr', label: 'France' },
   '미국': { code: 'us', label: 'USA' },
@@ -26,7 +25,6 @@ const COMMON_RACKS = [
   '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
 ];
 
-// 전달해주신 전체 와인 목록 1:1 정밀 영문 데이터베이스
 const MASTER_WINE_DICTIONARY = {
   '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
   '로버트 몬다비 까베르네 소비뇽': 'Robert Mondavi Winery Cabernet Sauvignon',
@@ -247,33 +245,59 @@ function getWineEnglishName(koreanName) {
   return '';
 }
 
+// 아이폰/갤럭시 등 대용량 사진도 브라우저 메모리 부하 없이 초고속 압축하는 최신 엔진
 function compressImageFile(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
+    if (!file) return reject(new Error('파일이 선택되지 않았습니다.'));
+
+    let objectUrl;
+    try {
+      objectUrl = URL.createObjectURL(file);
+    } catch (e) {
+      return reject(new Error('파일을 읽을 수 없습니다.'));
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      try {
+        URL.revokeObjectURL(objectUrl);
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 500;
-        const MAX_HEIGHT = 500;
+        const MAX_WIDTH = 450;
+        const MAX_HEIGHT = 450;
         let width = img.width;
         let height = img.height;
+
         if (width > height) {
-          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
         } else {
-          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+          if (height > MAX_HEIGHT) {
+            width = Math.round((width * MAX_HEIGHT) / height);
+            height = MAX_HEIGHT;
+          }
         }
+
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
-      };
-      img.onerror = reject;
-      img.src = e.target.result;
+
+        // 30KB 내외로 가볍게 압축하여 클라우드로 초고속 전송
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.68);
+        resolve(dataUrl);
+      } catch (err) {
+        reject(err);
+      }
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('이미지 디코딩에 실패했습니다.'));
+    };
+
+    img.src = objectUrl;
   });
 }
 
@@ -281,7 +305,6 @@ function mapFromDb(row) {
   const kName = row.name || '';
   const dictName = getWineEnglishName(kName);
   
-  // 기존 DB에 '... Wine' 접미사가 붙었거나 한글이 섞여 있으면 마스터 사전으로 즉시 갱신
   const isLegacy = row.english_name && (row.english_name.endsWith('Wine') || /[가-힣]/.test(row.english_name));
   const enName = (!row.english_name || isLegacy) ? (dictName || '') : row.english_name.trim();
 
@@ -318,6 +341,7 @@ export default function App() {
   const [zoomedWine, setZoomedWine] = useState(null);
   const [editingImageWine, setEditingImageWine] = useState(null);
   const [inputImageUrl, setInputImageUrl] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const [editingRackWine, setEditingRackWine] = useState(null);
   const [newSelectedRack, setNewSelectedRack] = useState('1번랙');
@@ -601,21 +625,50 @@ export default function App() {
     setShowAddModal(false);
   };
 
+  // [핵심 개선] 사진 저장 시 화면 즉시 반영 (낙관적 업데이트) + 에러 검증
   const handleSaveImage = async (imgData) => {
     if (!editingImageWine) return;
-    await supabase.from('wines').update({ custom_image: imgData }).eq('id', editingImageWine.id);
+    const targetId = editingImageWine.id;
+
+    // 1. 화면 즉시 반영 (웹소켓 연결 지연과 무관하게 0.01초 만에 화면에 사진 출력)
+    setStockData(prev => prev.map(item => item.id === targetId ? { ...item, customImage: imgData } : item));
+    setZoomedWine(prev => (prev && prev.id === targetId ? { ...prev, customImage: imgData } : prev));
+    
     setEditingImageWine(null);
     setInputImageUrl('');
+
+    // 2. Supabase 클라우드에 영구 저장
+    try {
+      const { error } = await supabase
+        .from('wines')
+        .update({ custom_image: imgData })
+        .eq('id', targetId);
+
+      if (error) {
+        console.error('사진 클라우드 저장 실패:', error);
+        alert(`사진 저장에 실패했습니다: ${error.message}`);
+      }
+    } catch (err) {
+      console.error('사진 저장 예외 발생:', err);
+      alert('네트워크 연결 문제로 사진 저장에 실패했습니다.');
+    }
   };
 
+  // [핵심 개선] 아이폰/갤럭시 고용량 사진 안정적 처리 + 로딩 상태 표시
   const handleImageFileUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
     if (!file) return;
+
+    setIsUploadingImage(true);
     try {
       const compressedDataUrl = await compressImageFile(file);
       await handleSaveImage(compressedDataUrl);
     } catch (err) {
-      alert('이미지 압축 실패');
+      console.error('이미지 처리 오류:', err);
+      alert('사진을 처리하지 못했습니다: ' + (err.message || '지원되지 않는 이미지 형식이거나 용량이 너무 큽니다.'));
+    } finally {
+      setIsUploadingImage(false);
+      if (e.target) e.target.value = ''; // 같은 사진 재선택 시에도 정상 작동
     }
   };
 
@@ -1195,7 +1248,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 카드 뷰 (PC/모바일 모두 고화질 국기 이미지 표시) */}
+        {/* 카드 뷰 */}
         {viewMode === 'grid' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filteredData.map((item) => {
@@ -1209,7 +1262,7 @@ export default function App() {
                   className="bg-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between shadow-xl transition relative group"
                 >
                   <div>
-                    {/* 상단 메타 바 (선명한 컬러 국기 이미지 적용) */}
+                    {/* 상단 메타 바 */}
                     <div className="flex items-center justify-between text-xs pb-2.5 mb-3 border-b border-slate-800/60 text-slate-400">
                       <div className="flex items-center gap-1.5">
                         {countryStyle.code ? (
@@ -1380,7 +1433,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 테이블 뷰 (선명한 컬러 국기 이미지 적용) */}
+        {/* 테이블 뷰 */}
         {viewMode === 'table' && (
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
             <div className="sm:hidden px-3 py-2 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400">
@@ -1671,7 +1724,7 @@ export default function App() {
             </div>
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-300">정확한 영문 와인명 입력</label>
-              <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
+              <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
             </div>
             <div className="pt-3 border-t border-slate-800 flex gap-2">
               <button onClick={() => setEditingEnglishWine(null)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs">취소</button>
@@ -1735,6 +1788,67 @@ export default function App() {
                 </a>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 사진 등록 모달 (로딩 상태 스피너 탑재) */}
+      {editingImageWine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base">와인 사진 클라우드 등록</h3>
+                <p className="text-xs text-rose-400 mt-0.5 truncate max-w-xs">{editingImageWine.name} ({editingImageWine.vintage})</p>
+              </div>
+              <button 
+                disabled={isUploadingImage}
+                onClick={() => setEditingImageWine(null)} 
+                className="text-slate-400 hover:text-white disabled:opacity-40"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {isUploadingImage ? (
+              <div className="py-8 flex flex-col items-center justify-center gap-3 text-rose-400">
+                <RefreshCw className="w-8 h-8 animate-spin text-rose-500" />
+                <p className="text-xs font-semibold text-slate-200">사진 최적화 압축 및 저장 중...</p>
+                <p className="text-[11px] text-slate-500">잠시만 기다려 주세요</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <span className="text-xs font-semibold text-slate-300 block">방법 1. 구글 이미지 자동 검색</span>
+                  <a href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent((editingImageWine.englishName || editingImageWine.name) + ' ' + (editingImageWine.vintage !== 'NV' ? editingImageWine.vintage : '') + ' wine bottle label')}`} target="_blank" rel="noreferrer" className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                    <Search className="w-3.5 h-3.5" /> <span>구글에서 라벨 사진 찾기</span>
+                  </a>
+                </div>
+
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <span className="text-xs font-semibold text-slate-300 block">방법 2. 이미지 주소(URL) 붙여넣기</span>
+                  <div className="flex gap-2">
+                    <input type="url" placeholder="https://... 이미지 주소" value={inputImageUrl} onChange={(e) => setInputImageUrl(e.target.value)} className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500" />
+                    <button type="button" onClick={() => inputImageUrl.trim() && handleSaveImage(inputImageUrl.trim())} className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold shrink-0 transition">적용</button>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                  <span className="text-xs font-semibold text-slate-300 block">방법 3. 카메라 촬영 / 앨범 사진</span>
+                  <label className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-750 active:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700 transition">
+                    <Camera className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>카메라로 촬영 / 앨범에서 선택</span>
+                    <input type="file" accept="image/*" onChange={handleImageFileUpload} className="hidden" />
+                  </label>
+                </div>
+
+                {editingImageWine.customImage && (
+                  <button type="button" onClick={() => handleSaveImage(null)} className="w-full py-2 text-red-400 hover:bg-red-950/30 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition">
+                    <Trash2 className="w-3.5 h-3.5" /> <span>등록된 사진 삭제</span>
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
