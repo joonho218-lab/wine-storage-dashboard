@@ -25,7 +25,19 @@ const COMMON_RACKS = [
   '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
 ];
 
+// 전달해주신 전체 와인 목록 1:1 정밀 영문 데이터베이스 (방금 한글로 수정한 5종 포함 완료)
 const MASTER_WINE_DICTIONARY = {
+  // 방금 한글명으로 수정하신 5종 영구 자동 매칭
+  '필립 파칼레 샹볼 뮈지니 1등급 "레 상티에"': 'Philippe Pacalet Chambolle-Musigny 1er Cru Les Sentiers',
+  '샤또 레 까름 오 브리옹': 'Château Les Carmes Haut-Brion',
+  '(OT) 앙리 부아요 슈발리에 몽라세 그랑 크뤼 블랑': 'Domaine Henri Boillot Chevalier-Montrachet Grand Cru Blanc',
+  '(OT) 앙리 부아요 슈발리에 몽라셰 그랑 크뤼 블랑': 'Domaine Henri Boillot Chevalier-Montrachet Grand Cru Blanc',
+  '마세토 (토스카나)': 'Tenuta dell\'Ornellaia Masseto',
+  '(OT) 도멘 꼬쉬 뒤리 퓔리니 몽라세 레 앙세니에르': "Domaine Coche-Dury Puligny-Montrachet 'Les Enseignères'",
+  '(OT) 도멘 꼬쉬 뒤리 퓔리니 몽라셰 레 앙세니에르': "Domaine Coche-Dury Puligny-Montrachet 'Les Enseignères'",
+  '그르기치 힐스 욘트빌 올드 바인 까베르네 소비뇽': 'Grgich Hills Estate Yountville Old Vine Cabernet Sauvignon',
+
+  // 미국
   '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
   '로버트 몬다비 까베르네 소비뇽': 'Robert Mondavi Winery Cabernet Sauvignon',
   '로버트 몬다비 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
@@ -58,15 +70,21 @@ const MASTER_WINE_DICTIONARY = {
   '스크리밍 이글': 'Screaming Eagle Cabernet Sauvignon',
   '스크리밍 이글 소비뇽 블랑': 'Screaming Eagle Sauvignon Blanc',
   '캡샌디 엔드레 750ml': 'Kapcsándy Family Winery Estate Cuvée Endre',
+
+  // 호주
   '토브렉, 런릭': 'Torbreck RunRig Shiraz',
   '토브렉, 레어드 1500ml': 'Torbreck The Laird 1.5L',
   '우드커터스 쉬라즈': "Torbreck Woodcutter's Shiraz",
   '힐 오브 그레이스 쉬라즈': 'Henschke Hill of Grace Shiraz',
+
+  // 스페인
   '펠릭스 카예호, 셀렉시온 데 비녜도스 데 라 파밀리아': 'Bodegas Félix Callejo Selección de Viñedos de la Familia',
   '발부에나': 'Vega Sicilia Valbuena 5°',
   '우니코': 'Vega Sicilia Único',
   '토마스 에스테반': 'Tomás Esteban Ribera del Duero',
   '삔띠아': 'Pintia (Vega Sicilia) Toro',
+
+  // 이탈리아
   '가야, 다르마지': 'Gaja Darmagi Cabernet Sauvignon',
   '사시까이아': 'Tenuta San Guido Sassicaia',
   '사시까이아 6L': 'Tenuta San Guido Sassicaia Imperial 6L',
@@ -101,10 +119,16 @@ const MASTER_WINE_DICTIONARY = {
   '이 소디 산 니콜로750ml': 'Castellare di Castellina I Sodi di San Niccolò',
   'VINO BIANCO': 'Vino Bianco d\'Italia',
   'VINO ROSSO': 'Vino Rosso d\'Italia',
+
+  // 칠레
   '비네도 차드윅': 'Viñedo Chadwick Cabernet Sauvignon',
   'Almaviva 알마비바': 'Viña Almaviva',
   '세냐': 'Seña (Chadwick & Mondavi)',
+
+  // 포르투갈
   '테일러스 빈티지 포트': "Taylor Fladgate Vintage Port",
+
+  // 프랑스
   '도멘 퐁소, 끌로 드 라 로슈 그랑 크뤼 뀌베 비에이유 비뉴': 'Domaine Ponsot Clos de la Roche Grand Cru Cuvée Vieilles Vignes',
   '샤또 무똥 로칠드': 'Château Mouton Rothschild',
   '알베르 비쇼, 샹볼 뮈지니': 'Albert Bichot Chambolle-Musigny',
@@ -245,7 +269,6 @@ function getWineEnglishName(koreanName) {
   return '';
 }
 
-// 아이폰/갤럭시 등 대용량 사진도 브라우저 메모리 부하 없이 초고속 압축하는 최신 엔진
 function compressImageFile(file) {
   return new Promise((resolve, reject) => {
     if (!file) return reject(new Error('파일이 선택되지 않았습니다.'));
@@ -284,7 +307,6 @@ function compressImageFile(file) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        // 30KB 내외로 가볍게 압축하여 클라우드로 초고속 전송
         const dataUrl = canvas.toDataURL('image/jpeg', 0.68);
         resolve(dataUrl);
       } catch (err) {
@@ -301,12 +323,15 @@ function compressImageFile(file) {
   });
 }
 
-function mapFromDb(row) {
+function mapFromDb(row, existingWine = null) {
   const kName = row.name || '';
   const dictName = getWineEnglishName(kName);
   
   const isLegacy = row.english_name && (row.english_name.endsWith('Wine') || /[가-힣]/.test(row.english_name));
   const enName = (!row.english_name || isLegacy) ? (dictName || '') : row.english_name.trim();
+
+  // [수정] DB 이벤트 수신 시 기존에 로컬에 있던 customImage가 유실되지 않도록 철저히 보존
+  const image = row.custom_image || (existingWine ? existingWine.customImage : null);
 
   return {
     id: Number(row.id),
@@ -320,7 +345,7 @@ function mapFromDb(row) {
     currentQty: row.current_qty,
     status: row.status,
     note: row.note,
-    customImage: row.custom_image,
+    customImage: image,
   };
 }
 
@@ -419,12 +444,12 @@ export default function App() {
           });
 
           await supabase.from('wines').insert(initialData);
-          setStockData(initialData.map(mapFromDb));
+          setStockData(initialData.map(r => mapFromDb(r)));
         } catch (e) {
           console.error('기본 데이터 초기화 실패:', e);
         }
       } else if (dbWines) {
-        setStockData(dbWines.map(mapFromDb));
+        setStockData(dbWines.map(r => mapFromDb(r)));
       }
       setLoading(false);
     }
@@ -437,7 +462,12 @@ export default function App() {
         if (payload.eventType === 'INSERT') {
           setStockData(prev => [mapFromDb(payload.new), ...prev.filter(item => item.id !== Number(payload.new.id))]);
         } else if (payload.eventType === 'UPDATE') {
-          setStockData(prev => prev.map(item => item.id === Number(payload.new.id) ? mapFromDb(payload.new) : item));
+          setStockData(prev => prev.map(item => {
+            if (item.id === Number(payload.new.id)) {
+              return mapFromDb(payload.new, item); // [수정] 기존 item의 사진을 보존하면서 업데이트
+            }
+            return item;
+          }));
         } else if (payload.eventType === 'DELETE') {
           setStockData(prev => prev.filter(item => item.id !== Number(payload.old.id)));
         }
@@ -532,18 +562,28 @@ export default function App() {
     setCustomNewRack('');
   };
 
+  // [수정] 영문명 저장 시 기존 customImage를 절대 덮어쓰지 않고 온전히 보존
   const handleSaveEnglishName = async () => {
     if (!editingEnglishWine) return;
+    const targetId = editingEnglishWine.id;
     const trimmed = inputEnglishName.trim();
-    await supabase.from('wines').update({ english_name: trimmed }).eq('id', editingEnglishWine.id);
     
-    setStockData(prev => prev.map(w => w.id === editingEnglishWine.id ? { ...w, englishName: trimmed } : w));
+    // 로컬 상태 즉시 갱신 (기존 w의 모든 속성, 특히 customImage 100% 보존)
+    setStockData(prev => prev.map(w => w.id === targetId ? { ...w, englishName: trimmed } : w));
+    if (zoomedWine && zoomedWine.id === targetId) {
+      setZoomedWine(prev => ({ ...prev, englishName: trimmed }));
+    }
+
     setEditingEnglishWine(null);
     setInputEnglishName('');
+
+    await supabase.from('wines').update({ english_name: trimmed }).eq('id', targetId);
   };
 
+  // [수정] 비고 저장 시에도 기존 customImage 100% 보존
   const handleSaveNote = async () => {
     if (!editingNoteWine) return;
+    const targetId = editingNoteWine.id;
     const trimmed = inputNote.trim();
     const prevNote = editingNoteWine.note || '';
     if (prevNote === trimmed) {
@@ -554,11 +594,19 @@ export default function App() {
     const now = new Date();
     const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
 
-    await supabase.from('wines').update({ note: trimmed }).eq('id', editingNoteWine.id);
+    setStockData(prev => prev.map(w => w.id === targetId ? { ...w, note: trimmed } : w));
+    if (zoomedWine && zoomedWine.id === targetId) {
+      setZoomedWine(prev => ({ ...prev, note: trimmed }));
+    }
+
+    setEditingNoteWine(null);
+    setInputNote('');
+
+    await supabase.from('wines').update({ note: trimmed }).eq('id', targetId);
     await supabase.from('wine_logs').insert([{
       log_id: String(Date.now() + Math.random()),
       time: timeStr,
-      wine_id: editingNoteWine.id,
+      wine_id: targetId,
       name: editingNoteWine.name,
       vintage: editingNoteWine.vintage,
       rack: editingNoteWine.rack,
@@ -569,10 +617,6 @@ export default function App() {
       new_qty: editingNoteWine.currentQty,
       reason: `비고 수정: "${prevNote}" ➔ "${trimmed}"`
     }]);
-
-    setStockData(prev => prev.map(w => w.id === editingNoteWine.id ? { ...w, note: trimmed } : w));
-    setEditingNoteWine(null);
-    setInputNote('');
   };
 
   const handleAddNewWine = async (e) => {
@@ -625,12 +669,12 @@ export default function App() {
     setShowAddModal(false);
   };
 
-  // [핵심 개선] 사진 저장 시 화면 즉시 반영 (낙관적 업데이트) + 에러 검증
+  // 사진 저장 시 화면 즉시 반영 + DB 안전 기록
   const handleSaveImage = async (imgData) => {
     if (!editingImageWine) return;
     const targetId = editingImageWine.id;
 
-    // 1. 화면 즉시 반영 (웹소켓 연결 지연과 무관하게 0.01초 만에 화면에 사진 출력)
+    // 1. 화면 즉시 반영
     setStockData(prev => prev.map(item => item.id === targetId ? { ...item, customImage: imgData } : item));
     setZoomedWine(prev => (prev && prev.id === targetId ? { ...prev, customImage: imgData } : prev));
     
@@ -654,7 +698,6 @@ export default function App() {
     }
   };
 
-  // [핵심 개선] 아이폰/갤럭시 고용량 사진 안정적 처리 + 로딩 상태 표시
   const handleImageFileUpload = async (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -668,7 +711,7 @@ export default function App() {
       alert('사진을 처리하지 못했습니다: ' + (err.message || '지원되지 않는 이미지 형식이거나 용량이 너무 큽니다.'));
     } finally {
       setIsUploadingImage(false);
-      if (e.target) e.target.value = ''; // 같은 사진 재선택 시에도 정상 작동
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -733,7 +776,7 @@ export default function App() {
       });
 
       await supabase.from('wines').insert(defaultList);
-      setStockData(defaultList.map(mapFromDb));
+      setStockData(defaultList.map(r => mapFromDb(r)));
       setHistoryLogs([]);
       alert('기본 데이터로 초기화가 완료되었습니다.');
     } catch (err) {
@@ -892,7 +935,7 @@ export default function App() {
 
       if (insertError) throw insertError;
 
-      setStockData(mergedList.map(mapFromDb));
+      setStockData(mergedList.map(r => mapFromDb(r)));
       setDiffModalData(null);
       alert(successMessage);
     } catch (err) {
@@ -1792,7 +1835,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 사진 등록 모달 (로딩 상태 스피너 탑재) */}
+      {/* 사진 등록 모달 */}
       {editingImageWine && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
