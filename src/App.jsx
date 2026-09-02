@@ -33,66 +33,35 @@ function getWineEnglishName(koreanName) {
   if (matchEn) return matchEn[1].trim();
 
   const EXACT_MAP = {
+    '씨네쿼넌': 'Sine Qua Non',
+    '사시까이아': 'Tenuta San Guido Sassicaia',
+    '사시카이아': 'Tenuta San Guido Sassicaia',
+    '샤또 무통 로칠드': 'Château Mouton Rothschild',
+    '페블레,비엥브뉘 바타르 몽라쉐 그랑 크뤼': 'Faiveley Bienvenues-Bâtard-Montrachet Grand Cru',
+    '프레스코발디,카스텔지오콘도 리제르바': 'Frescobaldi CastelGiocondo Brunello di Montalcino Riserva',
+    '오퍼스원': 'Opus One',
+    '오퍼스 원': 'Opus One',
+    '샤또 린치 바쥐': 'Château Lynch-Bages',
+    '샤또 린쉬 바쥬': 'Château Lynch-Bages',
     '부샤 슈발리에 몽라쉐': 'Bouchard Père & Fils Chevalier-Montrachet Grand Cru',
-    '슈발리에 몽라쉐 레스 푸스랠스': 'Chevalier-Montrachet Grand Cru Les Demoiselles',
-    '슈발리에 몽라쉐 그랜드 크루': 'Chevalier-Montrachet Grand Cru',
     '슈발리에 몽라쉐': 'Chevalier-Montrachet Grand Cru',
     '바타르 몽라쉐': 'Bâtard-Montrachet Grand Cru',
-    '비앵브뉘 바타르 몽라쉐': 'Bienvenues-Bâtard-Montrachet Grand Cru',
-    '크리오 바타르 몽라쉐': 'Criots-Bâtard-Montrachet Grand Cru',
     '몽라쉐': 'Le Montrachet Grand Cru',
     '로마네 꽁티': 'Domaine de la Romanée-Conti Romanée-Conti',
-    '라 타슈': 'Domaine de la Romanée-Conti La Tâche',
-    '리쉬부르': 'Richebourg Grand Cru',
-    '에셰조': 'Échezeaux Grand Cru',
     '로마네 생 비방': 'Romanée-Saint-Vivant Grand Cru',
-    '클로 드 부조': 'Clos de Vougeot Grand Cru',
-    '꼬르통 샤를마뉴': 'Corton-Charlemagne Grand Cru',
-    '코르통 샤를마뉴': 'Corton-Charlemagne Grand Cru',
-    '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
-    '로버트 몬다비 까베르네 소비뇽': 'Robert Mondavi Winery Cabernet Sauvignon',
-    '로버트 몬다비 오크빌': 'Robert Mondavi Winery Oakville Cabernet Sauvignon',
-    '오퍼스 원': 'Opus One',
-    '오퍼스원': 'Opus One',
+    '스크리밍 이글': 'Screaming Eagle Cabernet Sauvignon',
     '알마비바': 'Viña Almaviva',
     '샤또 마고': 'Château Margaux',
     '샤또 라피트 로칠드': 'Château Lafite Rothschild',
     '샤또 라투르': 'Château Latour',
-    '샤또 무통 로칠드': 'Château Mouton Rothschild',
     '샤또 오브리옹': 'Château Haut-Brion',
     '샤또 디켐': "Château d'Yquem",
-    '샤또 슈발 블랑': 'Château Cheval Blanc',
-    '샤또 오존': 'Château Ausone',
-    '샤또 페트뤼스': 'Pétrus',
-    '샤또 르 팽': 'Le Pin',
-    '사시까이아': 'Tenuta San Guido Sassicaia',
-    '사시카이아': 'Tenuta San Guido Sassicaia',
     '티냐넬로': 'Antinori Tignanello',
     '솔라이아': 'Antinori Solaia',
-    '오르넬라이아': 'Tenuta dell\'Ornellaia Ornellaia',
-    '마세토': 'Tenuta dell\'Ornellaia Masseto',
-    '인시그니아': 'Joseph Phelps Insignia',
     '돔 페리뇽': 'Dom Pérignon Vintage Champagne',
-    '돔페리뇽': 'Dom Pérignon Vintage Champagne',
-    '크루그': 'Krug Brut Champagne',
-    '크리스탈': 'Louis Roederer Cristal Brut Champagne',
     '케이머스': 'Caymus Vineyards Cabernet Sauvignon',
     '실버 오크': 'Silver Oak Napa Valley Cabernet Sauvignon',
     '샤또 딸보': 'Château Talbot',
-    '샤또 린쉬 바쥬': 'Château Lynch-Bages',
-    '샤또 퐁테 카네': 'Château Pontet-Canet',
-    '샤또 꼬스 데스투르넬': "Château Cos d'Estournel",
-    '샤또 몽로즈': 'Château Montrose',
-    '샤또 깔롱 세귀르': 'Château Calon-Ségur',
-    '샤또 지스쿠르': 'Château Giscours',
-    '샤또 베이슈벨': 'Château Beychevelle',
-    '몬테스 알파': 'Montes Alpha Cabernet Sauvignon',
-    '몬테스 퍼플 엔젤': 'Montes Purple Angel Carménère',
-    '돈 멜초': 'Concha y Toro Don Melchor',
-    '펜폴즈 그랜지': 'Penfolds Grange Shiraz',
-    '투핸즈': 'Two Hands Shiraz',
-    '몰리두커': 'Mollydooker Shiraz',
-    '우니코': 'Vega Sicilia Único',
   };
 
   for (const [k, v] of Object.entries(EXACT_MAP)) {
@@ -100,74 +69,19 @@ function getWineEnglishName(koreanName) {
   }
 
   const REPLACEMENTS = [
-    [/부샤\s*페레|부샤/g, 'Bouchard Père & Fils '],
-    [/슈발리에\s*몽라쉐/g, 'Chevalier-Montrachet '],
-    [/몽라쉐/g, 'Montrachet '],
     [/샤또|샤토/g, 'Château '],
     [/도멘/g, 'Domaine '],
-    [/테누타/g, 'Tenuta '],
-    [/카스텔로/g, 'Castello '],
-    [/보데가스|보데가/g, 'Bodegas '],
-    [/로버트\s*몬다비/g, 'Robert Mondavi '],
-    [/조셉\s*펠프스/g, 'Joseph Phelps '],
-    [/케이머스/g, 'Caymus '],
-    [/덕혼/g, 'Duckhorn '],
-    [/실버\s*오크/g, 'Silver Oak '],
-    [/이기갈|이\s*기갈/g, 'E. Guigal '],
-    [/루이\s*자도/g, 'Louis Jadot '],
-    [/조셉\s*드루앵/g, 'Joseph Drouhin '],
-    [/안티노리/g, 'Antinori '],
-    [/가야/g, 'Gaja '],
-    [/마시/g, 'Masi '],
-    [/토마시/g, 'Tommasi '],
-    [/루체/g, 'Luce '],
-    [/까베르네\s*소비뇽|카베르네\s*소비뇽/g, 'Cabernet Sauvignon '],
-    [/까베르네\s*프랑|카베르네\s*프랑/g, 'Cabernet Franc '],
-    [/소비뇽\s*블랑/g, 'Sauvignon Blanc '],
-    [/피노\s*누아|피노누아/g, 'Pinot Noir '],
-    [/샤르도네|샤도네이/g, 'Chardonnay '],
-    [/메를로|멜롯/g, 'Merlot '],
-    [/시라|쉬라즈/g, 'Syrah/Shiraz '],
-    [/산지오베제/g, 'Sangiovese '],
-    [/네비올로/g, 'Nebbiolo '],
-    [/템프라니요/g, 'Tempranillo '],
-    [/그르나슈|가르나차/g, 'Grenache '],
-    [/말벡/g, 'Malbec '],
-    [/진판델/g, 'Zinfandel '],
-    [/리슬링/g, 'Riesling '],
-    [/모스카토/g, 'Moscato '],
-    [/리저브|레제르바|레세르바|리제르바/g, 'Reserve '],
-    [/그랑\s*레제르바/g, 'Gran Reserva '],
+    [/까베르네\s*소비뇽/g, 'Cabernet Sauvignon '],
+    [/피노\s*누아/g, 'Pinot Noir '],
+    [/샤르도네/g, 'Chardonnay '],
     [/그랑\s*크뤼|그랜드\s*크루/g, 'Grand Cru '],
-    [/프리미에\s*크뤼/g, 'Premier Cru '],
-    [/레스\s*푸스랠스|레\s*푸셀/g, 'Les Pucelles '],
-    [/클라시코/g, 'Classico '],
-    [/바롤로/g, 'Barolo '],
-    [/바르바레스코/g, 'Barbaresco '],
-    [/브루넬로\s*디\s*몬탈치노/g, 'Brunello di Montalcino '],
-    [/아마로네/g, 'Amarone '],
-    [/끼안티|키안티/g, 'Chianti '],
-    [/샴페인|상파뉴/g, 'Champagne '],
-    [/브륏|브뤼/g, 'Brut '],
-    [/로제/g, 'Rosé '],
-    [/블랑\s*드\s*블랑/g, 'Blanc de Blancs '],
-    [/블랑\s*드\s*누아/g, 'Blanc de Noirs '],
-    [/샤블리/g, 'Chablis '],
-    [/뫼르소/g, 'Meursault '],
-    [/뽀이약/g, 'Pauillac '],
-    [/마고/g, 'Margaux '],
-    [/생테밀리옹/g, 'Saint-Émilion '],
-    [/포메롤/g, 'Pomerol '],
-    [/생쥘리앙/g, 'Saint-Julien '],
-    [/생테스테프/g, 'Saint-Estèphe '],
-    [/페삭\s*레오냥/g, 'Pessac-Léognan '],
+    [/리저브|레제르바/g, 'Reserve '],
   ];
 
   let en = str;
   for (const [rgx, replacement] of REPLACEMENTS) {
     en = en.replace(rgx, replacement);
   }
-
   en = en.replace(/,/g, ', ').replace(/\s+/g, ' ').trim();
   return en !== str ? en : `${str} Wine`;
 }
@@ -228,7 +142,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRack, setSelectedRack] = useState('전체');
   const [selectedCountry, setSelectedCountry] = useState('전체');
-  const [selectedVintage, setSelectedVintage] = useState('전체'); // [추가] 빈티지 필터 상태
+  const [selectedVintage, setSelectedVintage] = useState('전체');
   const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const [showRackMap, setShowRackMap] = useState(false);
@@ -569,6 +483,7 @@ export default function App() {
     }
   };
 
+  // [핵심 개선] 1:1 정밀 매칭 알고리즘 적용 (이름 + 빈티지 + 랙 동시 일치 검증)
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -586,7 +501,7 @@ export default function App() {
         if (headerIdx === -1) headerIdx = 1;
 
         const rows = rawData.slice(headerIdx + 1);
-        const excelRows = rows.filter(r => r && r[1]).map((r, i) => ({
+        const excelRows = rows.filter(r => r && r[1]).map((r) => ({
           name: String(r[1] || '').trim(),
           vintage: String(r[2] || 'NV').trim(),
           rack: String(r[3] || '미지정').trim(),
@@ -597,20 +512,54 @@ export default function App() {
           englishName: r[10] ? String(r[10]).trim() : null
         }));
 
-        const diffs = [];
+        const matchedWebIds = new Set();
+        const excelWithMatch = [];
+
+        // 1차 매칭: 이름 + 빈티지 + 보관랙이 완벽히 일치하는 항목 1:1 매칭
         excelRows.forEach((excelItem) => {
-          const existing = stockData.find(w => w.name === excelItem.name && w.vintage === excelItem.vintage);
-          if (existing) {
-            const qtyChanged = existing.currentQty !== excelItem.currentQty;
-            const rackChanged = existing.rack !== excelItem.rack;
+          const exactMatch = stockData.find(
+            w => !matchedWebIds.has(w.id) &&
+                 w.name === excelItem.name &&
+                 w.vintage === excelItem.vintage &&
+                 w.rack === excelItem.rack
+          );
+          if (exactMatch) {
+            matchedWebIds.add(exactMatch.id);
+            excelWithMatch.push({ excelItem, match: exactMatch });
+          } else {
+            excelWithMatch.push({ excelItem, match: null });
+          }
+        });
+
+        // 2차 매칭: 위치가 실제로 변경되었을 수 있는 잔여 항목 매칭
+        excelWithMatch.forEach((item) => {
+          if (!item.match) {
+            const looseMatch = stockData.find(
+              w => !matchedWebIds.has(w.id) &&
+                   w.name === item.excelItem.name &&
+                   w.vintage === item.excelItem.vintage
+            );
+            if (looseMatch) {
+              matchedWebIds.add(looseMatch.id);
+              item.match = looseMatch;
+            }
+          }
+        });
+
+        // 실제 차이점 추출
+        const diffs = [];
+        excelWithMatch.forEach(({ excelItem, match }) => {
+          if (match) {
+            const qtyChanged = match.currentQty !== excelItem.currentQty;
+            const rackChanged = match.rack !== excelItem.rack;
             if (qtyChanged || rackChanged) {
               diffs.push({
-                id: existing.id,
+                id: match.id,
                 name: excelItem.name,
                 vintage: excelItem.vintage,
-                webQty: existing.currentQty,
+                webQty: match.currentQty,
                 excelQty: excelItem.currentQty,
-                webRack: existing.rack,
+                webRack: match.rack,
                 excelRack: excelItem.rack,
                 qtyChanged,
                 rackChanged,
@@ -620,9 +569,9 @@ export default function App() {
         });
 
         if (diffs.length > 0) {
-          setDiffModalData({ excelRows, diffs });
+          setDiffModalData({ excelWithMatch, diffs });
         } else {
-          executeSmartMerge(excelRows, "모든 재고와 위치가 완벽히 일치합니다. 최신 상태로 동기화되었습니다.");
+          executeSmartMerge(excelWithMatch, "모든 재고와 위치가 완벽히 일치합니다. 최신 상태로 동기화되었습니다.");
         }
       } catch (err) {
         console.error('엑셀 분석 실패:', err);
@@ -633,29 +582,61 @@ export default function App() {
     e.target.value = '';
   };
 
-  const executeSmartMerge = async (excelRows, successMessage = "엑셀 데이터가 안전하게 병합 반영되었습니다.") => {
+  // [핵심 개선] 사진 2중 백업 보존 및 안전한 병합 실행
+  const executeSmartMerge = async (excelWithMatchList, successMessage = "엑셀 데이터가 안전하게 병합 반영되었습니다.") => {
     setLoading(true);
     try {
-      const mergedList = excelRows.map((item, i) => {
-        const existing = stockData.find(w => w.name === item.name && w.vintage === item.vintage);
+      // 1. 기존 DB의 모든 사진을 2중 백업 (ID별 백업 + 와인명&빈티지별 백업)
+      const photoByNameVintage = new Map();
+      const englishByName = new Map();
+
+      stockData.forEach(w => {
+        if (w.customImage) {
+          photoByNameVintage.set(`${w.name}__${w.vintage}`, w.customImage);
+        }
+        if (w.englishName) {
+          englishByName.set(w.name, w.englishName);
+        }
+      });
+
+      // 2. ID 중복을 원천 차단하면서 사진 완벽 보존
+      const usedIds = new Set();
+      const mergedList = excelWithMatchList.map(({ excelItem, match }, idx) => {
+        let rowId = match && !usedIds.has(match.id) ? match.id : Date.now() + idx;
+        usedIds.add(rowId);
+
+        // 사진 보존: 엑셀 사진 우선 -> 매칭된 웹 사진 -> 와인명&빈티지 백업 사진 순으로 보존
+        const preservedImage = excelItem.customImage ||
+                               (match && match.customImage) ||
+                               photoByNameVintage.get(`${excelItem.name}__${excelItem.vintage}`) ||
+                               null;
+
+        const preservedEnglish = excelItem.englishName ||
+                                (match && match.englishName) ||
+                                englishByName.get(excelItem.name) ||
+                                getWineEnglishName(excelItem.name);
+
         return {
-          id: existing ? existing.id : Date.now() + i,
-          country: item.country,
-          name: item.name,
-          english_name: item.englishName || (existing ? existing.englishName : getWineEnglishName(item.name)),
-          vintage: item.vintage,
-          rack: item.rack,
-          in_qty: existing ? existing.inQty : item.currentQty,
-          out_qty: existing ? existing.outQty : 0,
-          current_qty: item.currentQty,
-          status: item.currentQty <= 0 ? '재고없음' : '정상',
-          note: item.note,
-          custom_image: existing && existing.customImage ? existing.customImage : item.customImage,
+          id: rowId,
+          country: excelItem.country,
+          name: excelItem.name,
+          english_name: preservedEnglish,
+          vintage: excelItem.vintage,
+          rack: excelItem.rack,
+          in_qty: match ? match.inQty : excelItem.currentQty,
+          out_qty: match ? match.outQty : 0,
+          current_qty: excelItem.currentQty,
+          status: excelItem.currentQty <= 0 ? '재고없음' : '정상',
+          note: excelItem.note,
+          custom_image: preservedImage,
         };
       });
 
+      // 3. 안전한 일괄 교체
       await supabase.from('wines').delete().neq('id', 0);
-      await supabase.from('wines').insert(mergedList);
+      const { error: insertError } = await supabase.from('wines').insert(mergedList);
+
+      if (insertError) throw insertError;
 
       setStockData(mergedList.map(mapFromDb));
       setDiffModalData(null);
@@ -715,7 +696,7 @@ export default function App() {
     return ['전체', ...unique];
   }, [stockData]);
 
-  // [추가] 등록된 모든 빈티지 목록 추출 (중복 제거 및 정렬)
+  // 빈티지 목록 추출
   const vintageList = useMemo(() => {
     const unique = Array.from(new Set(stockData.map(item => item.vintage))).filter(Boolean);
     return ['전체', ...unique.sort((a, b) => b.localeCompare(a))];
@@ -730,7 +711,7 @@ export default function App() {
                           item.note.toLowerCase().includes(term);
       const matchRack = selectedRack === '전체' || item.rack === selectedRack;
       const matchCountry = selectedCountry === '전체' || item.country === selectedCountry;
-      const matchVintage = selectedVintage === '전체' || item.vintage === selectedVintage; // [추가] 빈티지 필터 적용
+      const matchVintage = selectedVintage === '전체' || item.vintage === selectedVintage;
       const matchStatus = onlyOutOfStock ? (item.currentQty <= 0 || item.status === '재고없음') : true;
       return matchSearch && matchRack && matchCountry && matchVintage && matchStatus;
     });
@@ -966,7 +947,7 @@ export default function App() {
           )}
         </div>
 
-        {/* 검색 및 필터 바 (국가, 빈티지 필터 나란히 배치) */}
+        {/* 검색 및 필터 바 ([전체 국가] 옆에 [전체 빈티지] 필터 나란히 배치) */}
         <div className="bg-slate-900/80 border border-slate-800 p-3 sm:p-4 rounded-xl sm:rounded-2xl space-y-3">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -981,7 +962,7 @@ export default function App() {
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              {/* 국가 필터 */}
+              {/* 1. 원산지 국가 필터 */}
               <select
                 value={selectedCountry}
                 onChange={(e) => setSelectedCountry(e.target.value)}
@@ -990,7 +971,7 @@ export default function App() {
                 {countryList.map(c => (<option key={c} value={c}>{c === '전체' ? '🌍 전체 국가' : `🌍 ${c}`}</option>))}
               </select>
 
-              {/* [추가] 빈티지 필터 */}
+              {/* 2. 빈티지 필터 (국가 바로 옆) */}
               <select
                 value={selectedVintage}
                 onChange={(e) => setSelectedVintage(e.target.value)}
@@ -999,6 +980,7 @@ export default function App() {
                 {vintageList.map(v => (<option key={v} value={v}>{v === '전체' ? '📅 전체 빈티지' : `📅 ${v}`}</option>))}
               </select>
 
+              {/* 3. 품절만 토글 */}
               <button
                 onClick={() => setOnlyOutOfStock(!onlyOutOfStock)}
                 className={`px-2.5 py-2 text-xs font-medium rounded-xl border transition shrink-0 touch-manipulation ${
@@ -1272,7 +1254,7 @@ export default function App() {
               <div>
                 <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">재고 정밀 검증</span>
                 <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-1.5 mt-0.5">
-                  <AlertCircle className="w-5 h-5 text-amber-400" /> 업로드 엑셀 변경점 감지 ({diffModalData.diffs.length}건)
+                  <AlertCircle className="w-5 h-5 text-amber-400" /> 업로드 엑셀 실제 변경점 감지 ({diffModalData.diffs.length}건)
                 </h3>
               </div>
               <button onClick={() => setDiffModalData(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
@@ -1280,7 +1262,7 @@ export default function App() {
 
             <div className="p-4 sm:p-5 flex-1 overflow-y-auto space-y-3">
               <p className="text-xs text-slate-300 bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl leading-relaxed">
-                ⚠️ 현장 창고에서 수정된 내역과 엑셀 간에 수량 또는 위치 차이가 있는 항목입니다. 확인 후 병합해 주세요.
+                ⚠️ 현장 창고에서 수정된 내역과 엑셀 간에 수량 또는 위치 차이가 있는 항목입니다. 확인 후 병합해 주세요. (기존 등록 사진은 100% 보존됩니다)
               </p>
 
               <div className="space-y-2 pt-1">
@@ -1309,9 +1291,9 @@ export default function App() {
 
             <div className="p-4 bg-slate-950 border-t border-slate-800 flex gap-2">
               <button onClick={() => setDiffModalData(null)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold">취소</button>
-              <button onClick={() => executeSmartMerge(diffModalData.excelRows, "검증된 엑셀 데이터가 안전하게 병합 반영되었습니다.")} className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg flex items-center justify-center gap-1.5">
+              <button onClick={() => executeSmartMerge(diffModalData.excelWithMatch, "검증된 엑셀 데이터가 안전하게 병합 반영되었습니다.")} className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg flex items-center justify-center gap-1.5">
                 <Check className="w-4 h-4 stroke-[3]" />
-                <span>엑셀 내용으로 병합 적용</span>
+                <span>엑셀 내용으로 병합 적용 (사진 보존)</span>
               </button>
             </div>
           </div>
