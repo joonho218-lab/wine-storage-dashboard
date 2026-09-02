@@ -160,6 +160,10 @@ export default function App() {
   const [editingEnglishWine, setEditingEnglishWine] = useState(null);
   const [inputEnglishName, setInputEnglishName] = useState('');
 
+  // 비고(메모) 수정 모달 상태
+  const [editingNoteWine, setEditingNoteWine] = useState(null);
+  const [inputNote, setInputNote] = useState('');
+
   const [diffModalData, setDiffModalData] = useState(null);
 
   const [newWineForm, setNewWineForm] = useState({
@@ -349,6 +353,40 @@ export default function App() {
     setInputEnglishName('');
   };
 
+  // 비고(메모) 저장 핸들러
+  const handleSaveNote = async () => {
+    if (!editingNoteWine) return;
+    const trimmed = inputNote.trim();
+    const prevNote = editingNoteWine.note || '';
+    if (prevNote === trimmed) {
+      setEditingNoteWine(null);
+      return;
+    }
+
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+    await supabase.from('wines').update({ note: trimmed }).eq('id', editingNoteWine.id);
+    await supabase.from('wine_logs').insert([{
+      log_id: String(Date.now() + Math.random()),
+      time: timeStr,
+      wine_id: editingNoteWine.id,
+      name: editingNoteWine.name,
+      vintage: editingNoteWine.vintage,
+      rack: editingNoteWine.rack,
+      country: editingNoteWine.country,
+      change_type: '비고수정',
+      delta: 0,
+      prev_qty: editingNoteWine.currentQty,
+      new_qty: editingNoteWine.currentQty,
+      reason: `비고 수정: "${prevNote}" ➔ "${trimmed}"`
+    }]);
+
+    setStockData(prev => prev.map(w => w.id === editingNoteWine.id ? { ...w, note: trimmed } : w));
+    setEditingNoteWine(null);
+    setInputNote('');
+  };
+
   const handleAddNewWine = async (e) => {
     e.preventDefault();
     if (!newWineForm.name.trim()) return;
@@ -424,6 +462,12 @@ export default function App() {
         const oldRack = match[1];
         await supabase.from('wines').update({ rack: oldRack }).eq('id', log.wineId);
       }
+    } else if (log.changeType === '비고수정') {
+      const match = log.reason.match(/비고 수정:\s*"(.+?)"\s*➔\s*"(.+?)"/);
+      if (match) {
+        const oldNote = match[1];
+        await supabase.from('wines').update({ note: oldNote }).eq('id', log.wineId);
+      }
     } else {
       await supabase.from('wines').update({
         current_qty: log.prevQty,
@@ -483,7 +527,6 @@ export default function App() {
     }
   };
 
-  // [핵심 개선] 1:1 정밀 매칭 알고리즘 적용 (이름 + 빈티지 + 랙 동시 일치 검증)
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -515,7 +558,7 @@ export default function App() {
         const matchedWebIds = new Set();
         const excelWithMatch = [];
 
-        // 1차 매칭: 이름 + 빈티지 + 보관랙이 완벽히 일치하는 항목 1:1 매칭
+        // 1차: 이름 + 빈티지 + 랙이 완벽 일치하는 항목 1:1 매칭
         excelRows.forEach((excelItem) => {
           const exactMatch = stockData.find(
             w => !matchedWebIds.has(w.id) &&
@@ -531,7 +574,7 @@ export default function App() {
           }
         });
 
-        // 2차 매칭: 위치가 실제로 변경되었을 수 있는 잔여 항목 매칭
+        // 2차: 실제 위치 이동 가능성이 있는 잔여 항목 매칭
         excelWithMatch.forEach((item) => {
           if (!item.match) {
             const looseMatch = stockData.find(
@@ -546,7 +589,6 @@ export default function App() {
           }
         });
 
-        // 실제 차이점 추출
         const diffs = [];
         excelWithMatch.forEach(({ excelItem, match }) => {
           if (match) {
@@ -582,30 +624,24 @@ export default function App() {
     e.target.value = '';
   };
 
-  // [핵심 개선] 사진 2중 백업 보존 및 안전한 병합 실행
   const executeSmartMerge = async (excelWithMatchList, successMessage = "엑셀 데이터가 안전하게 병합 반영되었습니다.") => {
     setLoading(true);
     try {
-      // 1. 기존 DB의 모든 사진을 2중 백업 (ID별 백업 + 와인명&빈티지별 백업)
       const photoByNameVintage = new Map();
       const englishByName = new Map();
+      const noteByNameVintage = new Map();
 
       stockData.forEach(w => {
-        if (w.customImage) {
-          photoByNameVintage.set(`${w.name}__${w.vintage}`, w.customImage);
-        }
-        if (w.englishName) {
-          englishByName.set(w.name, w.englishName);
-        }
+        if (w.customImage) photoByNameVintage.set(`${w.name}__${w.vintage}`, w.customImage);
+        if (w.englishName) englishByName.set(w.name, w.englishName);
+        if (w.note) noteByNameVintage.set(`${w.name}__${w.vintage}__${w.rack}`, w.note);
       });
 
-      // 2. ID 중복을 원천 차단하면서 사진 완벽 보존
       const usedIds = new Set();
       const mergedList = excelWithMatchList.map(({ excelItem, match }, idx) => {
         let rowId = match && !usedIds.has(match.id) ? match.id : Date.now() + idx;
         usedIds.add(rowId);
 
-        // 사진 보존: 엑셀 사진 우선 -> 매칭된 웹 사진 -> 와인명&빈티지 백업 사진 순으로 보존
         const preservedImage = excelItem.customImage ||
                                (match && match.customImage) ||
                                photoByNameVintage.get(`${excelItem.name}__${excelItem.vintage}`) ||
@@ -615,6 +651,10 @@ export default function App() {
                                 (match && match.englishName) ||
                                 englishByName.get(excelItem.name) ||
                                 getWineEnglishName(excelItem.name);
+
+        const preservedNote = excelItem.note !== '' ? excelItem.note :
+                              (match && match.note ? match.note :
+                              noteByNameVintage.get(`${excelItem.name}__${excelItem.vintage}__${excelItem.rack}`) || '');
 
         return {
           id: rowId,
@@ -627,12 +667,11 @@ export default function App() {
           out_qty: match ? match.outQty : 0,
           current_qty: excelItem.currentQty,
           status: excelItem.currentQty <= 0 ? '재고없음' : '정상',
-          note: excelItem.note,
+          note: preservedNote,
           custom_image: preservedImage,
         };
       });
 
-      // 3. 안전한 일괄 교체
       await supabase.from('wines').delete().neq('id', 0);
       const { error: insertError } = await supabase.from('wines').insert(mergedList);
 
@@ -696,7 +735,6 @@ export default function App() {
     return ['전체', ...unique];
   }, [stockData]);
 
-  // 빈티지 목록 추출
   const vintageList = useMemo(() => {
     const unique = Array.from(new Set(stockData.map(item => item.vintage))).filter(Boolean);
     return ['전체', ...unique.sort((a, b) => b.localeCompare(a))];
@@ -947,7 +985,7 @@ export default function App() {
           )}
         </div>
 
-        {/* 검색 및 필터 바 ([전체 국가] 옆에 [전체 빈티지] 필터 나란히 배치) */}
+        {/* 검색 및 필터 바 */}
         <div className="bg-slate-900/80 border border-slate-800 p-3 sm:p-4 rounded-xl sm:rounded-2xl space-y-3">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -962,7 +1000,6 @@ export default function App() {
 
           <div className="flex items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              {/* 1. 원산지 국가 필터 */}
               <select
                 value={selectedCountry}
                 onChange={(e) => setSelectedCountry(e.target.value)}
@@ -971,7 +1008,6 @@ export default function App() {
                 {countryList.map(c => (<option key={c} value={c}>{c === '전체' ? '🌍 전체 국가' : `🌍 ${c}`}</option>))}
               </select>
 
-              {/* 2. 빈티지 필터 (국가 바로 옆) */}
               <select
                 value={selectedVintage}
                 onChange={(e) => setSelectedVintage(e.target.value)}
@@ -980,7 +1016,6 @@ export default function App() {
                 {vintageList.map(v => (<option key={v} value={v}>{v === '전체' ? '📅 전체 빈티지' : `📅 ${v}`}</option>))}
               </select>
 
-              {/* 3. 품절만 토글 */}
               <button
                 onClick={() => setOnlyOutOfStock(!onlyOutOfStock)}
                 className={`px-2.5 py-2 text-xs font-medium rounded-xl border transition shrink-0 touch-manipulation ${
@@ -1080,13 +1115,36 @@ export default function App() {
                         <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 shrink-0" />
                       </div>
 
-                      {item.note && (
-                        <div className="mt-1.5">
-                          <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 truncate max-w-full">
-                            🏷️ {item.note}
-                          </span>
-                        </div>
-                      )}
+                      {/* 비고 클릭 시 수정 모달 열림 */}
+                      <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                        {item.note ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingNoteWine(item);
+                              setInputNote(item.note || '');
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:border-amber-400 active:bg-amber-500/20 transition truncate max-w-full touch-manipulation"
+                            title="클릭하여 비고(메모) 수정"
+                          >
+                            <span>🏷️ {item.note}</span>
+                            <Edit3 className="w-2.5 h-2.5 opacity-60 shrink-0" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingNoteWine(item);
+                              setInputNote('');
+                            }}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-amber-300 transition touch-manipulation"
+                            title="비고(메모) 추가"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            <span>비고 추가</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -1226,7 +1284,20 @@ export default function App() {
                           </button>
                         </div>
                       </td>
-                      <td className="px-3 sm:px-4 py-3 text-amber-300/80 max-w-[120px] truncate">{item.note || '-'}</td>
+                      <td className="px-3 sm:px-4 py-3 max-w-[140px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingNoteWine(item);
+                            setInputNote(item.note || '');
+                          }}
+                          className="text-left text-amber-300/80 hover:text-amber-300 truncate w-full flex items-center justify-between gap-1 group"
+                          title="클릭하여 비고 수정"
+                        >
+                          <span className="truncate">{item.note || '-'}</span>
+                          <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 shrink-0" />
+                        </button>
+                      </td>
                       <td className="px-2 sm:px-3 py-3 text-center">
                         <a
                           href={`https://www.google.com/search?q=${encodeURIComponent((item.englishName || item.name) + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`}
@@ -1246,6 +1317,59 @@ export default function App() {
         )}
       </main>
 
+      {/* 비고(메모) 수정 모달 */}
+      {editingNoteWine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-amber-400" /> 비고 (메모) 수정
+                </h3>
+                <p className="text-xs text-rose-400 mt-0.5 truncate max-w-[240px]">
+                  {editingNoteWine.name} ({editingNoteWine.vintage})
+                </p>
+              </div>
+              <button onClick={() => setEditingNoteWine(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-300">비고 내용 입력</label>
+              <input
+                type="text"
+                placeholder="예: 매그넘 1500ml, 선물용, 보관상태 주의 등"
+                value={inputNote}
+                onChange={(e) => setInputNote(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500"
+                autoFocus
+              />
+              <p className="text-[11px] text-slate-500">
+                * 공백으로 비워두고 저장하시면 비고 태그가 삭제됩니다.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingNoteWine(null)}
+                className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-medium"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNote}
+                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 엑셀 검증 모달 */}
       {diffModalData && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
@@ -1262,7 +1386,7 @@ export default function App() {
 
             <div className="p-4 sm:p-5 flex-1 overflow-y-auto space-y-3">
               <p className="text-xs text-slate-300 bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl leading-relaxed">
-                ⚠️ 현장 창고에서 수정된 내역과 엑셀 간에 수량 또는 위치 차이가 있는 항목입니다. 확인 후 병합해 주세요. (기존 등록 사진은 100% 보존됩니다)
+                ⚠️ 현장 창고에서 수정된 내역과 엑셀 간에 수량 또는 위치 차이가 있는 항목입니다. 확인 후 병합해 주세요. (기존 등록 사진과 비고는 안전하게 보존됩니다)
               </p>
 
               <div className="space-y-2 pt-1">
@@ -1347,7 +1471,7 @@ export default function App() {
             </div>
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-300">정확한 영문 와인명 입력</label>
-              <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
+              <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
             </div>
             <div className="pt-3 border-t border-slate-800 flex gap-2">
               <button onClick={() => setEditingEnglishWine(null)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs">취소</button>
@@ -1382,6 +1506,23 @@ export default function App() {
                 <div onClick={() => { const target = zoomedWine; setZoomedWine(null); setEditingRackWine(target); setNewSelectedRack(target.rack); }} className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-rose-500/50 transition">
                   <span className="text-[10px] text-slate-400 block flex items-center justify-between">보관 랙 <Edit3 className="w-2.5 h-2.5 text-rose-400" /></span>
                   <span className="font-bold text-rose-400 text-sm">📍 {zoomedWine.rack}</span>
+                </div>
+                {/* 사진 확대 모달에서도 비고 확인 및 터치 수정 지원 */}
+                <div 
+                  onClick={() => {
+                    const target = zoomedWine;
+                    setZoomedWine(null);
+                    setEditingNoteWine(target);
+                    setInputNote(target.note || '');
+                  }}
+                  className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-amber-500/50 transition col-span-2"
+                >
+                  <span className="text-[10px] text-slate-400 flex items-center justify-between">
+                    비고 / 메모 <Edit3 className="w-2.5 h-2.5 text-amber-400" />
+                  </span>
+                  <span className="font-medium text-amber-300 text-xs truncate block mt-0.5">
+                    {zoomedWine.note ? `🏷️ ${zoomedWine.note}` : '등록된 비고가 없습니다 (터치하여 입력)'}
+                  </span>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -1530,6 +1671,7 @@ export default function App() {
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         log.changeType === '위치이동' ? 'bg-purple-500/20 text-purple-300' :
+                        log.changeType === '비고수정' ? 'bg-amber-500/20 text-amber-300' :
                         log.changeType.includes('등록') ? 'bg-emerald-500/20 text-emerald-300' :
                         log.changeType.includes('입고') ? 'bg-blue-500/20 text-blue-300' : 'bg-rose-500/20 text-rose-300'
                       }`}>
