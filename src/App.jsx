@@ -25,9 +25,7 @@ const COMMON_RACKS = [
   '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
 ];
 
-// 전달해주신 전체 와인 목록 1:1 정밀 영문 데이터베이스 (방금 한글로 수정한 5종 포함 완료)
 const MASTER_WINE_DICTIONARY = {
-  // 방금 한글명으로 수정하신 5종 영구 자동 매칭
   '필립 파칼레 샹볼 뮈지니 1등급 "레 상티에"': 'Philippe Pacalet Chambolle-Musigny 1er Cru Les Sentiers',
   '샤또 레 까름 오 브리옹': 'Château Les Carmes Haut-Brion',
   '(OT) 앙리 부아요 슈발리에 몽라세 그랑 크뤼 블랑': 'Domaine Henri Boillot Chevalier-Montrachet Grand Cru Blanc',
@@ -36,8 +34,6 @@ const MASTER_WINE_DICTIONARY = {
   '(OT) 도멘 꼬쉬 뒤리 퓔리니 몽라세 레 앙세니에르': "Domaine Coche-Dury Puligny-Montrachet 'Les Enseignères'",
   '(OT) 도멘 꼬쉬 뒤리 퓔리니 몽라셰 레 앙세니에르': "Domaine Coche-Dury Puligny-Montrachet 'Les Enseignères'",
   '그르기치 힐스 욘트빌 올드 바인 까베르네 소비뇽': 'Grgich Hills Estate Yountville Old Vine Cabernet Sauvignon',
-
-  // 미국
   '로버트 몬다비,까베르네 소비뇽 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
   '로버트 몬다비 까베르네 소비뇽': 'Robert Mondavi Winery Cabernet Sauvignon',
   '로버트 몬다비 리저브': 'Robert Mondavi Winery Cabernet Sauvignon Reserve',
@@ -70,21 +66,15 @@ const MASTER_WINE_DICTIONARY = {
   '스크리밍 이글': 'Screaming Eagle Cabernet Sauvignon',
   '스크리밍 이글 소비뇽 블랑': 'Screaming Eagle Sauvignon Blanc',
   '캡샌디 엔드레 750ml': 'Kapcsándy Family Winery Estate Cuvée Endre',
-
-  // 호주
   '토브렉, 런릭': 'Torbreck RunRig Shiraz',
   '토브렉, 레어드 1500ml': 'Torbreck The Laird 1.5L',
   '우드커터스 쉬라즈': "Torbreck Woodcutter's Shiraz",
   '힐 오브 그레이스 쉬라즈': 'Henschke Hill of Grace Shiraz',
-
-  // 스페인
   '펠릭스 카예호, 셀렉시온 데 비녜도스 데 라 파밀리아': 'Bodegas Félix Callejo Selección de Viñedos de la Familia',
   '발부에나': 'Vega Sicilia Valbuena 5°',
   '우니코': 'Vega Sicilia Único',
   '토마스 에스테반': 'Tomás Esteban Ribera del Duero',
   '삔띠아': 'Pintia (Vega Sicilia) Toro',
-
-  // 이탈리아
   '가야, 다르마지': 'Gaja Darmagi Cabernet Sauvignon',
   '사시까이아': 'Tenuta San Guido Sassicaia',
   '사시까이아 6L': 'Tenuta San Guido Sassicaia Imperial 6L',
@@ -119,16 +109,10 @@ const MASTER_WINE_DICTIONARY = {
   '이 소디 산 니콜로750ml': 'Castellare di Castellina I Sodi di San Niccolò',
   'VINO BIANCO': 'Vino Bianco d\'Italia',
   'VINO ROSSO': 'Vino Rosso d\'Italia',
-
-  // 칠레
   '비네도 차드윅': 'Viñedo Chadwick Cabernet Sauvignon',
   'Almaviva 알마비바': 'Viña Almaviva',
   '세냐': 'Seña (Chadwick & Mondavi)',
-
-  // 포르투갈
   '테일러스 빈티지 포트': "Taylor Fladgate Vintage Port",
-
-  // 프랑스
   '도멘 퐁소, 끌로 드 라 로슈 그랑 크뤼 뀌베 비에이유 비뉴': 'Domaine Ponsot Clos de la Roche Grand Cru Cuvée Vieilles Vignes',
   '샤또 무똥 로칠드': 'Château Mouton Rothschild',
   '알베르 비쇼, 샹볼 뮈지니': 'Albert Bichot Chambolle-Musigny',
@@ -330,7 +314,6 @@ function mapFromDb(row, existingWine = null) {
   const isLegacy = row.english_name && (row.english_name.endsWith('Wine') || /[가-힣]/.test(row.english_name));
   const enName = (!row.english_name || isLegacy) ? (dictName || '') : row.english_name.trim();
 
-  // [수정] DB 이벤트 수신 시 기존에 로컬에 있던 customImage가 유실되지 않도록 철저히 보존
   const image = row.custom_image || (existingWine ? existingWine.customImage : null);
 
   return {
@@ -377,6 +360,10 @@ export default function App() {
 
   const [editingNoteWine, setEditingNoteWine] = useState(null);
   const [inputNote, setInputNote] = useState('');
+
+  // 빈티지 수정 상태 추가
+  const [editingVintageWine, setEditingVintageWine] = useState(null);
+  const [inputVintage, setInputVintage] = useState('');
 
   const [diffModalData, setDiffModalData] = useState(null);
 
@@ -464,7 +451,7 @@ export default function App() {
         } else if (payload.eventType === 'UPDATE') {
           setStockData(prev => prev.map(item => {
             if (item.id === Number(payload.new.id)) {
-              return mapFromDb(payload.new, item); // [수정] 기존 item의 사진을 보존하면서 업데이트
+              return mapFromDb(payload.new, item);
             }
             return item;
           }));
@@ -562,13 +549,11 @@ export default function App() {
     setCustomNewRack('');
   };
 
-  // [수정] 영문명 저장 시 기존 customImage를 절대 덮어쓰지 않고 온전히 보존
   const handleSaveEnglishName = async () => {
     if (!editingEnglishWine) return;
     const targetId = editingEnglishWine.id;
     const trimmed = inputEnglishName.trim();
     
-    // 로컬 상태 즉시 갱신 (기존 w의 모든 속성, 특히 customImage 100% 보존)
     setStockData(prev => prev.map(w => w.id === targetId ? { ...w, englishName: trimmed } : w));
     if (zoomedWine && zoomedWine.id === targetId) {
       setZoomedWine(prev => ({ ...prev, englishName: trimmed }));
@@ -580,7 +565,6 @@ export default function App() {
     await supabase.from('wines').update({ english_name: trimmed }).eq('id', targetId);
   };
 
-  // [수정] 비고 저장 시에도 기존 customImage 100% 보존
   const handleSaveNote = async () => {
     if (!editingNoteWine) return;
     const targetId = editingNoteWine.id;
@@ -616,6 +600,45 @@ export default function App() {
       prev_qty: editingNoteWine.currentQty,
       new_qty: editingNoteWine.currentQty,
       reason: `비고 수정: "${prevNote}" ➔ "${trimmed}"`
+    }]);
+  };
+
+  // 빈티지 저장 핸들러
+  const handleSaveVintage = async () => {
+    if (!editingVintageWine) return;
+    const targetId = editingVintageWine.id;
+    const trimmed = inputVintage.trim() || 'NV';
+    const prevVintage = editingVintageWine.vintage || 'NV';
+    if (prevVintage === trimmed) {
+      setEditingVintageWine(null);
+      return;
+    }
+
+    const now = new Date();
+    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
+    setStockData(prev => prev.map(w => w.id === targetId ? { ...w, vintage: trimmed } : w));
+    if (zoomedWine && zoomedWine.id === targetId) {
+      setZoomedWine(prev => ({ ...prev, vintage: trimmed }));
+    }
+
+    setEditingVintageWine(null);
+    setInputVintage('');
+
+    await supabase.from('wines').update({ vintage: trimmed }).eq('id', targetId);
+    await supabase.from('wine_logs').insert([{
+      log_id: String(Date.now() + Math.random()),
+      time: timeStr,
+      wine_id: targetId,
+      name: editingVintageWine.name,
+      vintage: trimmed,
+      rack: editingVintageWine.rack,
+      country: editingVintageWine.country,
+      change_type: '빈티지수정',
+      delta: 0,
+      prev_qty: editingVintageWine.currentQty,
+      new_qty: editingVintageWine.currentQty,
+      reason: `빈티지 수정: "${prevVintage}" ➔ "${trimmed}"`
     }]);
   };
 
@@ -669,19 +692,16 @@ export default function App() {
     setShowAddModal(false);
   };
 
-  // 사진 저장 시 화면 즉시 반영 + DB 안전 기록
   const handleSaveImage = async (imgData) => {
     if (!editingImageWine) return;
     const targetId = editingImageWine.id;
 
-    // 1. 화면 즉시 반영
     setStockData(prev => prev.map(item => item.id === targetId ? { ...item, customImage: imgData } : item));
     setZoomedWine(prev => (prev && prev.id === targetId ? { ...prev, customImage: imgData } : prev));
     
     setEditingImageWine(null);
     setInputImageUrl('');
 
-    // 2. Supabase 클라우드에 영구 저장
     try {
       const { error } = await supabase
         .from('wines')
@@ -727,6 +747,12 @@ export default function App() {
       if (match) {
         const oldNote = match[1];
         await supabase.from('wines').update({ note: oldNote }).eq('id', log.wineId);
+      }
+    } else if (log.changeType === '빈티지수정') {
+      const match = log.reason.match(/빈티지 수정:\s*"(.+?)"\s*➔\s*"(.+?)"/);
+      if (match) {
+        const oldVintage = match[1];
+        await supabase.from('wines').update({ vintage: oldVintage }).eq('id', log.wineId);
       }
     } else {
       await supabase.from('wines').update({
@@ -885,34 +911,43 @@ export default function App() {
   const executeSmartMerge = async (excelWithMatchList, successMessage = "엑셀 데이터가 안전하게 병합 반영되었습니다.") => {
     setLoading(true);
     try {
-      const photoByNameVintage = new Map();
-      const englishByName = new Map();
-      const noteByNameVintage = new Map();
+      const { data: currentDbWines } = await supabase.from('wines').select('id, name, vintage, rack, custom_image, note, english_name');
+      
+      const photoStore = new Map();
+      const noteStore = new Map();
+      const englishStore = new Map();
 
-      stockData.forEach(w => {
-        if (w.customImage) photoByNameVintage.set(`${w.name}__${w.vintage}`, w.customImage);
-        if (w.englishName) englishByName.set(w.name, w.englishName);
-        if (w.note) noteByNameVintage.set(`${w.name}__${w.vintage}__${w.rack}`, w.note);
+      (currentDbWines || []).concat(stockData).forEach(w => {
+        if (w.custom_image || w.customImage) {
+          const img = w.custom_image || w.customImage;
+          photoStore.set(`${w.name}__${w.vintage}__${w.rack}`, img);
+          photoStore.set(`${w.name}__${w.vintage}`, img);
+          photoStore.set(w.name, img);
+        }
+        if (w.note) noteStore.set(`${w.name}__${w.vintage}__${w.rack}`, w.note);
+        if (w.english_name || w.englishName) englishStore.set(w.name, w.english_name || w.englishName);
       });
 
       const usedIds = new Set();
-      const mergedList = excelWithMatchList.map(({ excelItem, match }, idx) => {
+      const safeMergedList = excelWithMatchList.map(({ excelItem, match }, idx) => {
         let rowId = match && !usedIds.has(match.id) ? match.id : Date.now() + idx;
         usedIds.add(rowId);
 
-        const preservedImage = excelItem.customImage ||
+        const preservedPhoto = excelItem.customImage ||
                                (match && match.customImage) ||
-                               photoByNameVintage.get(`${excelItem.name}__${excelItem.vintage}`) ||
+                               photoStore.get(`${excelItem.name}__${excelItem.vintage}__${excelItem.rack}`) ||
+                               photoStore.get(`${excelItem.name}__${excelItem.vintage}`) ||
+                               photoStore.get(excelItem.name) ||
                                null;
 
         const preservedEnglish = excelItem.englishName ||
                                 (match && match.englishName) ||
-                                englishByName.get(excelItem.name) ||
+                                englishStore.get(excelItem.name) ||
                                 getWineEnglishName(excelItem.name);
 
         const preservedNote = excelItem.note !== '' ? excelItem.note :
                               (match && match.note ? match.note :
-                              noteByNameVintage.get(`${excelItem.name}__${excelItem.vintage}__${excelItem.rack}`) || '');
+                              noteStore.get(`${excelItem.name}__${excelItem.vintage}__${excelItem.rack}`) || '');
 
         return {
           id: rowId,
@@ -926,21 +961,19 @@ export default function App() {
           current_qty: excelItem.currentQty,
           status: excelItem.currentQty <= 0 ? '재고없음' : '정상',
           note: preservedNote,
-          custom_image: preservedImage,
+          custom_image: preservedPhoto,
         };
       });
 
-      await supabase.from('wines').delete().neq('id', 0);
-      const { error: insertError } = await supabase.from('wines').insert(mergedList);
+      const { error: upsertError } = await supabase.from('wines').upsert(safeMergedList, { onConflict: 'id' });
+      if (upsertError) throw upsertError;
 
-      if (insertError) throw insertError;
-
-      setStockData(mergedList.map(r => mapFromDb(r)));
+      setStockData(safeMergedList.map(r => mapFromDb(r)));
       setDiffModalData(null);
       alert(successMessage);
     } catch (err) {
       console.error('스마트 병합 실패:', err);
-      alert('병합 처리 중 오류가 발생했습니다.');
+      alert('병합 처리 중 오류가 발생했습니다: ' + (err.message || ''));
     } finally {
       setLoading(false);
     }
@@ -1305,7 +1338,7 @@ export default function App() {
                   className="bg-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between shadow-xl transition relative group"
                 >
                   <div>
-                    {/* 상단 메타 바 */}
+                    {/* 상단 메타 바 (빈티지 터치 시 수정 모달 열림) */}
                     <div className="flex items-center justify-between text-xs pb-2.5 mb-3 border-b border-slate-800/60 text-slate-400">
                       <div className="flex items-center gap-1.5">
                         {countryStyle.code ? (
@@ -1320,7 +1353,18 @@ export default function App() {
                         )}
                         <span className="font-medium text-slate-300">{countryStyle.label}</span>
                         <span className="text-slate-600">·</span>
-                        <span className="font-mono font-bold text-amber-300">{item.vintage}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingVintageWine(item);
+                            setInputVintage(item.vintage || '');
+                          }}
+                          className="font-mono font-bold text-amber-300 hover:text-amber-200 hover:underline flex items-center gap-0.5 cursor-pointer touch-manipulation"
+                          title="터치하여 빈티지 수정"
+                        >
+                          <span>{item.vintage}</span>
+                          <Edit3 className="w-2.5 h-2.5 opacity-60" />
+                        </button>
                       </div>
 
                       <button
@@ -1545,7 +1589,21 @@ export default function App() {
                             {item.englishName || '+ 영문명 입력'}
                           </div>
                         </td>
-                        <td className="px-2 sm:px-3 py-3 text-slate-300 text-center font-mono">{item.vintage}</td>
+                        {/* 테이블 뷰 빈티지 수정 버튼 */}
+                        <td className="px-2 sm:px-3 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingVintageWine(item);
+                              setInputVintage(item.vintage || '');
+                            }}
+                            className="text-amber-300 font-mono hover:underline inline-flex items-center justify-center gap-0.5 touch-manipulation"
+                            title="클릭하여 빈티지 수정"
+                          >
+                            <span>{item.vintage}</span>
+                            <Edit3 className="w-2.5 h-2.5 opacity-50" />
+                          </button>
+                        </td>
                         <td className="px-3 sm:px-4 py-3">
                           <button
                             onClick={() => {
@@ -1564,7 +1622,7 @@ export default function App() {
                               onClick={() => handleQtyChange(item.id, -1, '출고')}
                               className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
                             >
-                              <Minus className="w-3 h-3" />
+                              <Minus className="w-3.5 h-3.5" />
                             </button>
                             <span className={`w-8 text-center font-bold font-mono ${
                               item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
@@ -1612,6 +1670,59 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* 빈티지 수정 모달 */}
+      {editingVintageWine && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-white text-base flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-amber-400" /> 빈티지 수정
+                </h3>
+                <p className="text-xs text-rose-400 mt-0.5 truncate max-w-[240px]">
+                  {editingVintageWine.name}
+                </p>
+              </div>
+              <button onClick={() => setEditingVintageWine(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-300">빈티지 (연도 또는 NV)</label>
+              <input
+                type="text"
+                placeholder="예: 2018 또는 NV"
+                value={inputVintage}
+                onChange={(e) => setInputVintage(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-mono focus:outline-none focus:border-rose-500"
+                autoFocus
+              />
+              <p className="text-[11px] text-slate-500">
+                * 숫자가 없는 샴페인은 NV로 입력해 주세요.
+              </p>
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingVintageWine(null)}
+                className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs font-medium"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveVintage}
+                className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 비고(메모) 수정 모달 */}
       {editingNoteWine && (
@@ -1794,13 +1905,26 @@ export default function App() {
             </div>
             <div className="p-4 bg-slate-900 border-t border-slate-800 space-y-3">
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800">
-                  <span className="text-[10px] text-slate-400 block">빈티지 / 생산국</span>
+                {/* 확대창에서도 빈티지 터치 시 바로 수정 가능 */}
+                <div 
+                  onClick={() => {
+                    const target = zoomedWine;
+                    setZoomedWine(null);
+                    setEditingVintageWine(target);
+                    setInputVintage(target.vintage || '');
+                  }}
+                  className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-amber-500/50 transition"
+                  title="터치하여 빈티지 수정"
+                >
+                  <span className="text-[10px] text-slate-400 flex items-center justify-between">
+                    빈티지 / 생산국 <Edit3 className="w-2.5 h-2.5 text-amber-400" />
+                  </span>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="font-bold text-amber-300 font-mono text-sm">{zoomedWine.vintage}</span>
                     <span className="text-slate-300">({zoomedWine.country})</span>
                   </div>
                 </div>
+
                 <div onClick={() => { const target = zoomedWine; setZoomedWine(null); setEditingRackWine(target); setNewSelectedRack(target.rack); }} className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 cursor-pointer hover:border-rose-500/50 transition">
                   <span className="text-[10px] text-slate-400 block flex items-center justify-between">보관 랙 <Edit3 className="w-2.5 h-2.5 text-rose-400" /></span>
                   <span className="font-bold text-rose-400 text-sm">📍 {zoomedWine.rack}</span>
@@ -1989,6 +2113,7 @@ export default function App() {
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         log.changeType === '위치이동' ? 'bg-purple-500/20 text-purple-300' :
                         log.changeType === '비고수정' ? 'bg-amber-500/20 text-amber-300' :
+                        log.changeType === '빈티지수정' ? 'bg-amber-500/20 text-amber-300' :
                         log.changeType.includes('등록') ? 'bg-emerald-500/20 text-emerald-300' :
                         log.changeType.includes('입고') ? 'bg-blue-500/20 text-blue-300' : 'bg-rose-500/20 text-rose-300'
                       }`}>
