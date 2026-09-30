@@ -361,7 +361,6 @@ export default function App() {
   const [editingNoteWine, setEditingNoteWine] = useState(null);
   const [inputNote, setInputNote] = useState('');
 
-  // 빈티지 수정 상태 추가
   const [editingVintageWine, setEditingVintageWine] = useState(null);
   const [inputVintage, setInputVintage] = useState('');
 
@@ -401,42 +400,10 @@ export default function App() {
         })));
       }
 
-      if (!error && (!dbWines || dbWines.length === 0)) {
-        try {
-          const res = await fetch('/wine_data.xlsx');
-          const ab = await res.arrayBuffer();
-          const wb = XLSX.read(ab, { type: 'array' });
-          const ws = wb.Sheets[wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0]];
-          const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
-          let headerIdx = rawData.findIndex(r => r && r.includes('와인명'));
-          if (headerIdx === -1) headerIdx = 1;
-
-          const rows = rawData.slice(headerIdx + 1);
-          const initialData = rows.filter(r => r && r[1]).map((r, i) => {
-            const kName = String(r[1] || '').trim();
-            return {
-              id: i + 1,
-              country: String(r[0] || '기타').trim(),
-              name: kName,
-              english_name: getWineEnglishName(kName),
-              vintage: String(r[2] || 'NV').trim(),
-              rack: String(r[3] || '미지정').trim(),
-              in_qty: Number(r[4]) || 0,
-              out_qty: Number(r[5]) || 0,
-              current_qty: Number(r[6]) || 0,
-              status: String(r[7] || '정상').trim(),
-              note: String(r[8] || '').trim(),
-              custom_image: null
-            };
-          });
-
-          await supabase.from('wines').insert(initialData);
-          setStockData(initialData.map(r => mapFromDb(r)));
-        } catch (e) {
-          console.error('기본 데이터 초기화 실패:', e);
-        }
-      } else if (dbWines) {
+      if (dbWines && dbWines.length > 0) {
         setStockData(dbWines.map(r => mapFromDb(r)));
+      } else {
+        setStockData([]);
       }
       setLoading(false);
     }
@@ -603,7 +570,6 @@ export default function App() {
     }]);
   };
 
-  // 빈티지 저장 핸들러
   const handleSaveVintage = async () => {
     if (!editingVintageWine) return;
     const targetId = editingVintageWine.id;
@@ -649,7 +615,10 @@ export default function App() {
     const targetRack = newWineForm.rack === '직접입력' 
       ? (newWineForm.customRack.trim() || '미지정') 
       : newWineForm.rack;
-    const newWineId = Date.now();
+    
+    // 안전한 10만 이하 순차 ID 부여
+    const maxId = stockData.reduce((max, w) => (w.id < 1000000 ? Math.max(max, w.id) : max), 0);
+    const newWineId = maxId + 1;
     const initialQty = Math.max(1, Number(newWineForm.qty) || 1);
     const kName = newWineForm.name.trim();
     const enName = newWineForm.englishName.trim() || getWineEnglishName(kName);
@@ -766,20 +735,22 @@ export default function App() {
   };
 
   const handleResetToDefault = async () => {
-    if (!window.confirm('기본 엑셀(343종) 상태로 클라우드 데이터를 초기화하시겠습니까? (수정한 재고, 위치 및 등록된 사진이 초기화됩니다)')) return;
+    if (!window.confirm('기본 엑셀(343종) 상태로 클라우드 데이터를 복구하시겠습니까?')) return;
     setLoading(true);
     try {
-      await supabase.from('wines').delete().neq('id', 0);
-      await supabase.from('wine_logs').delete().neq('log_id', '');
-
       const res = await fetch('/wine_data.xlsx');
+      if (!res.ok) {
+        alert('서버에 기본 파일이 없습니다. [새 파일] 버튼을 눌러 소장하고 계신 엑셀 파일을 업로드해 주세요!');
+        setLoading(false);
+        return;
+      }
       const ab = await res.arrayBuffer();
       const wb = XLSX.read(ab, { type: 'array' });
       const sheetName = wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
       const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      let headerIdx = rawData.findIndex(r => r && r.includes('와인명'));
+      let headerIdx = rawData.findIndex(r => Array.isArray(r) && r.some(cell => String(cell || '').includes('와인')));
       if (headerIdx === -1) headerIdx = 1;
 
       const rows = rawData.slice(headerIdx + 1);
@@ -801,10 +772,11 @@ export default function App() {
         };
       });
 
+      await supabase.from('wines').delete().neq('id', 0);
       await supabase.from('wines').insert(defaultList);
       setStockData(defaultList.map(r => mapFromDb(r)));
       setHistoryLogs([]);
-      alert('기본 데이터로 초기화가 완료되었습니다.');
+      alert('기본 데이터 복구가 완료되었습니다.');
     } catch (err) {
       console.error('초기화 실패:', err);
       alert('초기화 중 오류가 발생했습니다.');
@@ -813,33 +785,77 @@ export default function App() {
     }
   };
 
+  // [핵심 해결] ArrayBuffer 기반 초고속 안전 엑셀 파싱 및 컬럼 자동 매핑
   const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files && e.target.files[0];
     if (!file) return;
 
+    setLoading(true);
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
-        const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const data = new Uint8Array(evt.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
         const sheetName = wb.SheetNames.includes('와인재고현황') ? '와인재고현황' : wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
         const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-        let headerIdx = rawData.findIndex(r => r && r.includes('와인명'));
-        if (headerIdx === -1) headerIdx = 1;
+        if (!rawData || rawData.length === 0) {
+          alert('엑셀 파일에 데이터가 없습니다.');
+          setLoading(false);
+          return;
+        }
+
+        // 헤더 행 자동 감지 (어떤 형태든 '와인' 글자가 들어간 행을 헤더로 식별)
+        let headerIdx = rawData.findIndex(r => 
+          Array.isArray(r) && r.some(cell => {
+            const str = String(cell || '').trim();
+            return str.includes('와인명') || str.includes('와인이름') || str.includes('상품명');
+          })
+        );
+        if (headerIdx === -1) headerIdx = 0;
+
+        const headerRow = rawData[headerIdx] || [];
+        const findCol = (keywords, defaultIdx) => {
+          const idx = headerRow.findIndex(cell => {
+            const str = String(cell || '').trim();
+            return keywords.some(k => str.includes(k));
+          });
+          return idx !== -1 ? idx : defaultIdx;
+        };
+
+        const colCountry = findCol(['원산지', '국가', '생산국'], 0);
+        const colName = findCol(['와인명', '와인이름', '상품명', '한글명'], 1);
+        const colVintage = findCol(['빈티지', 'vintage', '연도'], 2);
+        const colRack = findCol(['보관위치', '위치', '랙', 'rack'], 3);
+        const colInQty = findCol(['총 입고량', '입고량', '입고'], 4);
+        const colOutQty = findCol(['총 출고량', '출고량', '출고'], 5);
+        const colCurrentQty = findCol(['현재고', '재고', '수량'], 6);
+        const colNote = findCol(['비고', '메모'], 8);
+        const colImage = findCol(['이미지', '사진', 'image'], 9);
+        const colEnglish = findCol(['영문명', '영문', 'english'], 10);
 
         const rows = rawData.slice(headerIdx + 1);
-        const excelRows = rows.filter(r => r && r[1]).map((r) => ({
-          name: String(r[1] || '').trim(),
-          vintage: String(r[2] || 'NV').trim(),
-          rack: String(r[3] || '미지정').trim(),
-          currentQty: Number(r[6]) || 0,
-          country: String(r[0] || '기타').trim(),
-          note: String(r[8] || '').trim(),
-          customImage: r[9] ? String(r[9]).trim() : null,
-          englishName: r[10] ? String(r[10]).trim() : null
-        }));
+        const excelRows = rows
+          .filter(r => r && r[colName] && String(r[colName]).trim() !== '' && !String(r[colName]).includes('와인명'))
+          .map((r) => ({
+            country: String(r[colCountry] || '기타').trim(),
+            name: String(r[colName] || '').trim(),
+            vintage: String(r[colVintage] || 'NV').trim(),
+            rack: String(r[colRack] || '미지정').trim(),
+            inQty: Number(r[colInQty]) || Number(r[colCurrentQty]) || 0,
+            outQty: Number(r[colOutQty]) || 0,
+            currentQty: Number(r[colCurrentQty]) || 0,
+            note: String(r[colNote] || '').trim(),
+            customImage: r[colImage] ? String(r[colImage]).trim() : null,
+            englishName: r[colEnglish] ? String(r[colEnglish]).trim() : null
+          }));
+
+        if (excelRows.length === 0) {
+          alert('유효한 와인 행을 찾지 못했습니다. 엑셀 파일 형식을 확인해 주세요.');
+          setLoading(false);
+          return;
+        }
 
         const matchedWebIds = new Set();
         const excelWithMatch = [];
@@ -896,18 +912,21 @@ export default function App() {
 
         if (diffs.length > 0) {
           setDiffModalData({ excelWithMatch, diffs });
+          setLoading(false);
         } else {
-          executeSmartMerge(excelWithMatch, "모든 재고와 위치가 완벽히 일치합니다. 최신 상태로 동기화되었습니다.");
+          executeSmartMerge(excelWithMatch, `총 ${excelRows.length}개 와인이 안전하게 업로드 반영되었습니다!`);
         }
       } catch (err) {
         console.error('엑셀 분석 실패:', err);
-        alert('엑셀 파일을 읽는 중 오류가 발생했습니다.');
+        alert('엑셀 파일을 읽는 중 오류가 발생했습니다: ' + (err.message || ''));
+        setLoading(false);
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = '';
   };
 
+  // [핵심 해결] ID 오버플로우 방지 순차 정수 ID + 배치 Upsert
   const executeSmartMerge = async (excelWithMatchList, successMessage = "엑셀 데이터가 안전하게 병합 반영되었습니다.") => {
     setLoading(true);
     try {
@@ -928,9 +947,25 @@ export default function App() {
         if (w.english_name || w.englishName) englishStore.set(w.name, w.english_name || w.englishName);
       });
 
+      // 10만 이하의 안전한 기존 최대 정수 ID 탐색
+      let maxId = 0;
+      stockData.forEach(w => {
+        if (typeof w.id === 'number' && w.id < 1000000 && w.id > maxId) maxId = w.id;
+      });
+      (currentDbWines || []).forEach(w => {
+        const num = Number(w.id);
+        if (!isNaN(num) && num < 1000000 && num > maxId) maxId = num;
+      });
+
       const usedIds = new Set();
-      const safeMergedList = excelWithMatchList.map(({ excelItem, match }, idx) => {
-        let rowId = match && !usedIds.has(match.id) ? match.id : Date.now() + idx;
+      const safeMergedList = excelWithMatchList.map(({ excelItem, match }) => {
+        let rowId;
+        if (match && match.id && Number(match.id) < 1000000 && !usedIds.has(Number(match.id))) {
+          rowId = Number(match.id);
+        } else {
+          maxId += 1;
+          rowId = maxId;
+        }
         usedIds.add(rowId);
 
         const preservedPhoto = excelItem.customImage ||
@@ -956,8 +991,8 @@ export default function App() {
           english_name: preservedEnglish,
           vintage: excelItem.vintage,
           rack: excelItem.rack,
-          in_qty: match ? match.inQty : excelItem.currentQty,
-          out_qty: match ? match.outQty : 0,
+          in_qty: match ? match.inQty : (excelItem.inQty || excelItem.currentQty),
+          out_qty: match ? match.outQty : (excelItem.outQty || 0),
           current_qty: excelItem.currentQty,
           status: excelItem.currentQty <= 0 ? '재고없음' : '정상',
           note: preservedNote,
@@ -965,8 +1000,13 @@ export default function App() {
         };
       });
 
-      const { error: upsertError } = await supabase.from('wines').upsert(safeMergedList, { onConflict: 'id' });
-      if (upsertError) throw upsertError;
+      // 100개씩 안전 배치 upsert
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < safeMergedList.length; i += BATCH_SIZE) {
+        const batch = safeMergedList.slice(i, i + BATCH_SIZE);
+        const { error: batchErr } = await supabase.from('wines').upsert(batch, { onConflict: 'id' });
+        if (batchErr) throw batchErr;
+      }
 
       setStockData(safeMergedList.map(r => mapFromDb(r)));
       setDiffModalData(null);
@@ -1057,7 +1097,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
         <Wine className="w-10 h-10 text-rose-500 animate-bounce" />
-        <p className="text-sm font-medium">프리미엄 와인 데이터베이스 연결 중...</p>
+        <p className="text-sm font-medium">와인 데이터베이스 동기화 및 복구 처리 중...</p>
       </div>
     );
   }
@@ -1126,13 +1166,13 @@ export default function App() {
             <button
               onClick={handleResetToDefault}
               className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-slate-800 active:bg-slate-700 hover:bg-slate-650 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
-              title="기본 엑셀 데이터로 초기화"
+              title="기본 데이터 복구"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               <span>초기화</span>
             </button>
 
-            <label className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-slate-800 active:bg-slate-700 text-slate-300 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 cursor-pointer transition touch-manipulation" title="새 엑셀 파일 업로드">
+            <label className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-rose-600/90 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-bold cursor-pointer transition shadow-md touch-manipulation" title="엑셀 파일 업로드">
               <Upload className="w-3.5 h-3.5" />
               <span>새 파일</span>
               <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
@@ -1142,6 +1182,24 @@ export default function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* 데이터가 비었을 때 안내 배너 */}
+        {stockData.length === 0 && (
+          <div className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-2xl p-6 text-center space-y-3">
+            <AlertCircle className="w-10 h-10 text-rose-400 mx-auto animate-pulse" />
+            <h2 className="text-lg font-bold text-white">현재 등록된 와인 데이터가 없습니다</h2>
+            <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
+              우측 상단의 <strong className="text-rose-400">[새 파일]</strong> 버튼을 눌러 소장하고 계신 최신 엑셀 파일을 선택하시면 즉시 343종 전 품목이 안전하게 복구됩니다!
+            </p>
+            <div className="pt-2">
+              <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-bold cursor-pointer shadow-lg transition">
+                <Upload className="w-4 h-4" />
+                <span>지금 엑셀 파일 업로드하여 복원</span>
+                <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
+              </label>
+            </div>
+          </div>
+        )}
+
         {/* 상단 통계 */}
         <div className="grid grid-cols-3 gap-2 sm:gap-4">
           <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl">
@@ -1338,7 +1396,7 @@ export default function App() {
                   className="bg-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between shadow-xl transition relative group"
                 >
                   <div>
-                    {/* 상단 메타 바 (빈티지 터치 시 수정 모달 열림) */}
+                    {/* 상단 메타 바 */}
                     <div className="flex items-center justify-between text-xs pb-2.5 mb-3 border-b border-slate-800/60 text-slate-400">
                       <div className="flex items-center gap-1.5">
                         {countryStyle.code ? (
@@ -1589,7 +1647,6 @@ export default function App() {
                             {item.englishName || '+ 영문명 입력'}
                           </div>
                         </td>
-                        {/* 테이블 뷰 빈티지 수정 버튼 */}
                         <td className="px-2 sm:px-3 py-3 text-center">
                           <button
                             type="button"
@@ -1905,7 +1962,6 @@ export default function App() {
             </div>
             <div className="p-4 bg-slate-900 border-t border-slate-800 space-y-3">
               <div className="grid grid-cols-2 gap-2 text-xs">
-                {/* 확대창에서도 빈티지 터치 시 바로 수정 가능 */}
                 <div 
                   onClick={() => {
                     const target = zoomedWine;
