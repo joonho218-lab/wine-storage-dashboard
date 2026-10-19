@@ -1,23 +1,34 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
-import { 
-  Wine, Search, Layers, AlertTriangle, Upload, Download,
-  ExternalLink, LayoutGrid, Table, Plus, Minus, 
+import {
+  Wine, Search, Upload, Download,
+  ExternalLink, Plus,
   Grid3X3, History, RotateCcw, X, Camera, RefreshCw,
-  ChevronDown, ChevronUp, PlusCircle, Image as ImageIcon, Trash2,
-  ZoomIn, Edit3, MapPin, AlertCircle, Check
+  PlusCircle, Trash2,
+  Edit3, MapPin, AlertCircle, AlertTriangle, Check
 } from 'lucide-react';
+import RackMap from './components/RackMap';
+import RecordPanel from './components/RecordPanel';
+import FilterBar from './components/FilterBar';
+import { GroupCards, GroupTable } from './components/WineList';
+import { MoreIcon, InOutIcon, ListIcon } from './components/icons';
+import {
+  WALL_RACKS, CENTER_RACKS, rackMatches, rackLabel, vintageNumber,
+  buildGroups, sortGroups, groupKeyOf, nowString,
+} from './lib/wine';
 
-const COUNTRY_INFO = {
-  '프랑스': { code: 'fr', label: 'France' },
-  '미국': { code: 'us', label: 'USA' },
-  '이탈리아': { code: 'it', label: 'Italy' },
-  '스페인': { code: 'es', label: 'Spain' },
-  '호주': { code: 'au', label: 'Australia' },
-  '칠레': { code: 'cl', label: 'Chile' },
-  '포르투갈': { code: 'pt', label: 'Portugal' },
-};
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
 
 const COMMON_RACKS = [
   ...Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`),
@@ -339,10 +350,20 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRack, setSelectedRack] = useState('전체');
   const [selectedCountry, setSelectedCountry] = useState('전체');
-  const [selectedVintage, setSelectedVintage] = useState('전체');
-  const [onlyOutOfStock, setOnlyOutOfStock] = useState(false);
-  const [viewMode, setViewMode] = useState('grid');
-  const [showRackMap, setShowRackMap] = useState(false);
+  const [vintageFrom, setVintageFrom] = useState('');
+  const [vintageTo, setVintageTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState('전체');
+  const [sortBy, setSortBy] = useState('rack');
+  const [selection, setSelection] = useState(null); // { key, rowId }
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerTerm, setPickerTerm] = useState('');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [toast, setToast] = useState('');
+  const isWide = useMediaQuery('(min-width: 1280px)');
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const fileInputRef = useRef(null);
+  const toastTimer = useRef(null);
   const [showLogModal, setShowLogModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   
@@ -450,38 +471,65 @@ export default function App() {
     };
   }, []);
 
+  // 입고(+)/출고(-) 기록. 성공하면 true를 돌려줍니다.
   const handleQtyChange = async (id, delta, reason = '수동 조정') => {
     const target = stockData.find(item => item.id === id);
-    if (!target) return;
+    if (!target || !delta) return false;
 
     const prevQty = target.currentQty;
-    const newQty = Math.max(0, prevQty + delta);
-    if (prevQty === newQty) return;
+    // 출고는 0 아래로 내려가지 않게, 입고는 음수 재고도 그대로 더함
+    const newQty = delta < 0 ? Math.max(0, prevQty + delta) : prevQty + delta;
+    if (prevQty === newQty) return false;
+    const actualDelta = newQty - prevQty;
 
-    const now = new Date();
-    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
-
-    await supabase.from('wines').update({
+    const updated = {
       current_qty: newQty,
-      out_qty: delta < 0 ? target.outQty + Math.abs(delta) : target.outQty,
-      in_qty: delta > 0 ? target.inQty + delta : target.inQty,
+      out_qty: actualDelta < 0 ? target.outQty + Math.abs(actualDelta) : target.outQty,
+      in_qty: actualDelta > 0 ? target.inQty + actualDelta : target.inQty,
       status: newQty <= 0 ? '재고없음' : '정상'
-    }).eq('id', id);
+    };
+
+    // 화면 먼저 반영 (실시간 동기화가 늦어도 바로 보이도록)
+    setStockData(prev => prev.map(w => w.id === id ? {
+      ...w, currentQty: newQty, outQty: updated.out_qty, inQty: updated.in_qty, status: updated.status
+    } : w));
+
+    const { error } = await supabase.from('wines').update(updated).eq('id', id);
+    if (error) {
+      setStockData(prev => prev.map(w => w.id === id ? target : w));
+      alert(`저장하지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.\n(${error.message})`);
+      return false;
+    }
 
     await supabase.from('wine_logs').insert([{
       log_id: String(Date.now() + Math.random()),
-      time: timeStr,
+      time: nowString(),
       wine_id: target.id,
       name: target.name,
       vintage: target.vintage,
       rack: target.rack,
       country: target.country,
-      change_type: delta > 0 ? '입고 (+)' : '출고 (-)',
-      delta,
+      change_type: actualDelta > 0 ? '입고 (+)' : '출고 (-)',
+      delta: actualDelta,
       prev_qty: prevQty,
       new_qty: newQty,
       reason
     }]);
+    return true;
+  };
+
+  const handleRecord = async (row, type, qty, purpose, detail) => {
+    const label = type === 'out' ? '출고' : '입고';
+    const reason = [label, purpose, detail].filter(Boolean).join(' · ');
+    const ok = await handleQtyChange(row.id, type === 'out' ? -qty : qty, reason);
+    if (ok) showToast(`${row.name} ${row.vintage} · ${label} ${qty}병 기록됨`);
+    return ok;
+  };
+
+  const showToast = (msg) => {
+    setToast(msg);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(''), 2600);
   };
 
   const handleSaveRackChange = async () => {
@@ -519,17 +567,21 @@ export default function App() {
   const handleSaveEnglishName = async () => {
     if (!editingEnglishWine) return;
     const targetId = editingEnglishWine.id;
+    // 같은 와인의 다른 빈티지에도 함께 적용 (빈티지별로 묶어 보여주기 때문)
+    const targetIds = editingEnglishWine.groupIds && editingEnglishWine.groupIds.length
+      ? editingEnglishWine.groupIds
+      : [targetId];
     const trimmed = inputEnglishName.trim();
-    
-    setStockData(prev => prev.map(w => w.id === targetId ? { ...w, englishName: trimmed } : w));
-    if (zoomedWine && zoomedWine.id === targetId) {
+
+    setStockData(prev => prev.map(w => targetIds.includes(w.id) ? { ...w, englishName: trimmed } : w));
+    if (zoomedWine && targetIds.includes(zoomedWine.id)) {
       setZoomedWine(prev => ({ ...prev, englishName: trimmed }));
     }
 
     setEditingEnglishWine(null);
     setInputEnglishName('');
 
-    await supabase.from('wines').update({ english_name: trimmed }).eq('id', targetId);
+    await supabase.from('wines').update({ english_name: trimmed }).in('id', targetIds);
   };
 
   const handleSaveNote = async () => {
@@ -734,8 +786,9 @@ export default function App() {
     setHistoryLogs(prev => prev.filter(l => l.logId !== log.logId));
   };
 
+  // 초기화는 화면 안의 확인 창(showResetConfirm)에서 한 번 더 확인한 뒤 실행됩니다.
   const handleResetToDefault = async () => {
-    if (!window.confirm('기본 엑셀(343종) 상태로 클라우드 데이터를 복구하시겠습니까?')) return;
+    setShowResetConfirm(false);
     setLoading(true);
     try {
       const res = await fetch('/wine_data.xlsx');
@@ -857,11 +910,16 @@ export default function App() {
           return;
         }
 
+        // 화면 목록(stockData)이 비어 있거나 오래됐을 수 있으므로, 서버의 현재 데이터와 직접 맞춰 봅니다.
+        // (목록이 비어 있을 때 올리면 모든 와인이 새로 추가돼 중복이 생기던 문제 방지)
+        const { data: freshDb, error: freshErr } = await supabase.from('wines').select('*');
+        const baseRows = !freshErr && Array.isArray(freshDb) ? freshDb.map(r => mapFromDb(r)) : stockData;
+
         const matchedWebIds = new Set();
         const excelWithMatch = [];
 
         excelRows.forEach((excelItem) => {
-          const exactMatch = stockData.find(
+          const exactMatch = baseRows.find(
             w => !matchedWebIds.has(w.id) &&
                  w.name === excelItem.name &&
                  w.vintage === excelItem.vintage &&
@@ -877,7 +935,7 @@ export default function App() {
 
         excelWithMatch.forEach((item) => {
           if (!item.match) {
-            const looseMatch = stockData.find(
+            const looseMatch = baseRows.find(
               w => !matchedWebIds.has(w.id) &&
                    w.name === item.excelItem.name &&
                    w.vintage === item.excelItem.vintage
@@ -1056,677 +1114,623 @@ export default function App() {
 
   const specialRacks = useMemo(() => {
     const unique = Array.from(new Set(stockData.map(item => item.rack))).filter(Boolean);
-    const wallRacks = Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`);
-    const centerRacks = ['중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)'];
-    return unique.filter(r => !wallRacks.includes(r) && !centerRacks.includes(r));
-  }, [stockData]);
+    return unique
+      .filter(r => !WALL_RACKS.includes(r) && !CENTER_RACKS.includes(r))
+      .sort((a, b) => (rackCountMap[b] || 0) - (rackCountMap[a] || 0));
+  }, [stockData, rackCountMap]);
 
   const countryList = useMemo(() => {
     const unique = Array.from(new Set(stockData.map(item => item.country))).filter(Boolean);
     return ['전체', ...unique];
   }, [stockData]);
 
-  const vintageList = useMemo(() => {
-    const unique = Array.from(new Set(stockData.map(item => item.vintage))).filter(Boolean);
-    return ['전체', ...unique.sort((a, b) => b.localeCompare(a))];
+  const vintageOptions = useMemo(() => {
+    const nums = stockData.map(item => vintageNumber(item.vintage)).filter(v => v !== null);
+    return Array.from(new Set(nums)).sort((a, b) => a - b);
+  }, [stockData]);
+
+  // 같은 와인·빈티지·위치가 두 번 이상 등록된 행 (엑셀 업로드가 겹쳐 생긴 중복)
+  const { dupIds, dupSets, dupExtraBottles } = useMemo(() => {
+    const byKey = new Map();
+    stockData.forEach(r => {
+      const k = `${r.name}__${r.vintage}__${r.rack}`;
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(r);
+    });
+    const ids = new Set();
+    let sets = 0;
+    let extra = 0;
+    byKey.forEach(list => {
+      if (list.length < 2) return;
+      sets += 1;
+      list.forEach(r => ids.add(r.id));
+      const qtys = list.map(r => r.currentQty || 0).sort((a, b) => b - a);
+      extra += qtys.slice(1).reduce((s2, q) => s2 + q, 0);
+    });
+    return { dupIds: ids, dupSets: sets, dupExtraBottles: extra };
   }, [stockData]);
 
   const filteredData = useMemo(() => {
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.trim().toLowerCase();
+    const from = vintageFrom === '' ? null : Number(vintageFrom);
+    const to = vintageTo === '' ? null : Number(vintageTo);
     return stockData.filter(item => {
-      const matchSearch = item.name.toLowerCase().includes(term) ||
-                          (item.englishName && item.englishName.toLowerCase().includes(term)) ||
-                          item.vintage.toLowerCase().includes(term) ||
-                          (item.note && item.note.toLowerCase().includes(term));
-      const matchRack = selectedRack === '전체' || item.rack === selectedRack;
+      const matchSearch = !term ||
+        item.name.toLowerCase().includes(term) ||
+        (item.englishName && item.englishName.toLowerCase().includes(term)) ||
+        String(item.vintage).toLowerCase().includes(term) ||
+        (item.note && item.note.toLowerCase().includes(term)) ||
+        (item.rack && item.rack.toLowerCase().includes(term));
+      const matchRack = rackMatches(item.rack, selectedRack);
       const matchCountry = selectedCountry === '전체' || item.country === selectedCountry;
-      const matchVintage = selectedVintage === '전체' || item.vintage === selectedVintage;
-      const matchStatus = onlyOutOfStock ? (item.currentQty <= 0 || item.status === '재고없음') : true;
+      let matchVintage = true;
+      if (from !== null || to !== null) {
+        const v = vintageNumber(item.vintage);
+        matchVintage = v !== null && (from === null || v >= from) && (to === null || v <= to);
+      }
+      const matchStatus =
+        statusFilter === '전체' ? true :
+        statusFilter === '재고있음' ? item.currentQty > 0 :
+        statusFilter === '품절' ? item.currentQty === 0 :
+        (item.currentQty < 0 || dupIds.has(item.id));
       return matchSearch && matchRack && matchCountry && matchVintage && matchStatus;
     });
-  }, [stockData, searchTerm, selectedRack, selectedCountry, selectedVintage, onlyOutOfStock]);
+  }, [stockData, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, dupIds]);
 
-  const stats = useMemo(() => {
-    const totalBottles = stockData.reduce((acc, cur) => acc + cur.currentQty, 0);
-    const totalTypes = stockData.length;
-    const outOfStockCount = stockData.filter(i => i.currentQty <= 0 || i.status === '재고없음').length;
-    return { totalBottles, totalTypes, outOfStockCount };
-  }, [stockData]);
+  const allGroups = useMemo(() => buildGroups(stockData), [stockData]);
+  const groups = useMemo(() => sortGroups(buildGroups(filteredData), sortBy), [filteredData, sortBy]);
+  const filteredBottles = useMemo(() => filteredData.reduce((s, r) => s + (r.currentQty || 0), 0), [filteredData]);
+  const errorRows = useMemo(() => stockData.filter(i => i.currentQty < 0), [stockData]);
+
+  const stats = useMemo(() => ({
+    totalBottles: stockData.reduce((acc, cur) => acc + cur.currentQty, 0),
+    wineCount: allGroups.length,
+    rowCount: stockData.length,
+    outOfStockCount: stockData.filter(i => i.currentQty === 0).length,
+    errorCount: errorRows.length,
+    checkCount: errorRows.length + dupSets,
+  }), [stockData, allGroups, errorRows, dupSets]);
+
+  const pickerGroups = useMemo(() => {
+    const term = pickerTerm.trim().toLowerCase();
+    const list = term
+      ? allGroups.filter(g => g.name.toLowerCase().includes(term) || g.englishName.toLowerCase().includes(term) || g.rows.some(r => r.name.toLowerCase().includes(term)))
+      : allGroups;
+    return sortGroups(list, 'name').slice(0, 60);
+  }, [allGroups, pickerTerm]);
+
+  const selectedGroup = selection ? allGroups.find(g => g.key === selection.key) || null : null;
+
+  // 영문명을 바꾸면 그룹 키가 바뀌므로 선택을 따라가게 함
+  useEffect(() => {
+    if (!selection || selectedGroup) return;
+    const row = stockData.find(r => r.id === selection.rowId);
+    if (row) setSelection({ key: groupKeyOf(row), rowId: row.id });
+    else setSelection(null);
+  }, [selection, selectedGroup, stockData]);
+
+  // PC: "/" 키로 검색창 이동
+  const searchRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/' || e.target.closest('input, textarea, select')) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const openWine = (group, rowId) => setSelection({ key: group.key, rowId });
+  const openRow = (row) => setSelection({ key: groupKeyOf(row), rowId: row.id });
+  const closeWine = () => setSelection(null);
+  const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const anyFilter = searchTerm.trim() !== '' || selectedRack !== '전체' || selectedCountry !== '전체' || vintageFrom !== '' || vintageTo !== '' || statusFilter !== '전체';
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedRack('전체');
+    setSelectedCountry('전체');
+    setVintageFrom('');
+    setVintageTo('');
+    setStatusFilter('전체');
+  };
+  const toggleStatus = (value) => {
+    setStatusFilter(prev => (prev === value ? '전체' : value));
+    scrollToId('wine-list');
+  };
+
+  const openEditRack = (row) => { setEditingRackWine(row); setNewSelectedRack(row.rack); };
+  const openEditVintage = (row) => { setEditingVintageWine(row); setInputVintage(row.vintage || ''); };
+  const openEditNote = (row) => { setEditingNoteWine(row); setInputNote(row.note || ''); };
+  const openEditEnglish = (row) => {
+    const group = allGroups.find(g => g.key === groupKeyOf(row));
+    setEditingEnglishWine({ ...row, groupIds: group ? group.rows.map(r => r.id) : [row.id] });
+    setInputEnglishName(row.englishName || '');
+  };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 gap-3">
-        <Wine className="w-10 h-10 text-rose-500 animate-bounce" />
-        <p className="text-sm font-medium">와인 데이터베이스 동기화 및 복구 처리 중...</p>
+        <Wine className="w-10 h-10 text-wine animate-pulse" />
+        <p className="text-sm font-medium">와인 재고를 불러오는 중…</p>
       </div>
     );
   }
 
+  const panel = selectedGroup ? (
+    <RecordPanel
+      key={selectedGroup.key}
+      group={selectedGroup}
+      selectedRowId={selection.rowId}
+      onSelectRow={(rowId) => setSelection(s => ({ ...s, rowId }))}
+      historyLogs={historyLogs}
+      onRecord={handleRecord}
+      onClose={closeWine}
+      onEditRack={openEditRack}
+      onEditVintage={openEditVintage}
+      onEditNote={openEditNote}
+      onEditEnglish={openEditEnglish}
+      onEditImage={(row) => setEditingImageWine(row)}
+      onZoom={(row) => setZoomedWine(row)}
+    />
+  ) : null;
+
+  const navItem = 'w-full h-10 rounded-xl flex items-center gap-2.5 px-3 text-[13.5px] text-slate-300 hover:bg-slate-850 hover:text-slate-100 transition';
+  const badge = 'ml-auto text-[11px] rounded-full px-2 leading-[18px] tabular';
+
+  const kpis = [
+    {
+      label: '총 보관',
+      value: stats.totalBottles.toLocaleString(),
+      unit: '병',
+      sub: dupSets > 0 ? `중복 제외 시 약 ${(stats.totalBottles - dupExtraBottles).toLocaleString()}병` : `${stats.rowCount}개 항목`,
+    },
+    { label: '와인', value: stats.wineCount, unit: '종', sub: '빈티지 묶음 기준' },
+    { label: '품절', value: stats.outOfStockCount, unit: '건', tone: 'warn', filter: '품절' },
+    { label: '점검 필요', value: stats.checkCount, unit: '건', tone: stats.checkCount > 0 ? 'error' : 'none', filter: '오류' },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-28">
-      {/* 상단 헤더 */}
-      <header className="border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-30 px-3.5 sm:px-6 py-2.5 sm:py-4">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="p-2 bg-rose-600/20 text-rose-500 rounded-xl border border-rose-500/30 shrink-0">
-                <Wine className="w-5 h-5 sm:w-6 sm:h-6" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-sm sm:text-xl font-bold tracking-tight text-white flex items-center gap-1.5 truncate">
-                  서울석유 2층 와인창고
-                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="실시간 클라우드 연결됨" />
-                </h1>
-                <p className="text-[10px] sm:text-xs text-emerald-400 truncate">
-                  실시간 양방향 클라우드 동기화 중
-                </p>
-              </div>
-            </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans lg:grid lg:grid-cols-[216px_minmax(0,1fr)] xl:grid-cols-[216px_minmax(0,1fr)_400px]">
+      <input ref={fileInputRef} type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
 
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="sm:hidden flex items-center gap-1 px-3 py-1.5 bg-rose-600 active:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-950/50 shrink-0 touch-manipulation"
-            >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>와인추가</span>
-            </button>
+      {/* ───────── PC 사이드바 ───────── */}
+      <aside className="hidden lg:flex flex-col sticky top-0 h-screen border-r border-slate-750 bg-[#120f13] px-3 py-5">
+        <div className="flex items-center gap-2.5 px-2 pb-6">
+          <div className="w-9 h-9 rounded-xl bg-wine/15 border border-wine/35 grid place-items-center text-wine-light">
+            <Wine className="w-[18px] h-[18px]" />
           </div>
+          <div className="min-w-0">
+            <div className="text-[15px] font-bold leading-tight">2층 와인창고</div>
+            <div className="text-[11.5px] text-slate-400">서울석유</div>
+          </div>
+        </div>
 
-          <div className="grid grid-cols-4 sm:flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="hidden sm:flex items-center gap-1 px-3.5 py-2 bg-rose-600 active:bg-rose-700 hover:bg-rose-500 text-white rounded-xl text-sm font-bold shadow-md shadow-rose-950/50 touch-manipulation"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>와인추가</span>
-            </button>
+        <nav className="flex flex-col gap-0.5" aria-label="메뉴">
+          <button type="button" className={`${navItem} bg-slate-850 text-slate-100 font-semibold`} onClick={() => { setStatusFilter('전체'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+            <ListIcon className="w-[17px] h-[17px]" /> 재고 목록
+            <span className={`${badge} bg-slate-800 text-slate-400`}>{stats.wineCount}</span>
+          </button>
+          <button type="button" className={navItem} onClick={() => scrollToId('rack-map')}>
+            <Grid3X3 className="w-[17px] h-[17px]" /> 랙 맵
+          </button>
+          <button type="button" className={navItem} onClick={() => setShowLogModal(true)}>
+            <History className="w-[17px] h-[17px]" /> 입출고 이력
+            {historyLogs.length > 0 && <span className={`${badge} bg-amber-500 text-gold-dark font-bold`}>{historyLogs.length}</span>}
+          </button>
+          <button type="button" className={navItem} onClick={() => toggleStatus('오류')}>
+            <AlertTriangle className="w-[17px] h-[17px]" /> 점검 필요
+            {stats.checkCount > 0 && <span className={`${badge} bg-red-400 text-red-950 font-bold`}>{stats.checkCount}</span>}
+          </button>
+        </nav>
 
-            <button
-              onClick={() => setShowLogModal(true)}
-              className="relative flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-slate-800 active:bg-slate-700 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
-            >
-              <History className="w-3.5 h-3.5 text-amber-400" />
-              <span>이력</span>
-              {historyLogs.length > 0 && (
-                <span className="px-1.5 py-0.2 text-[9px] font-bold bg-amber-500 text-slate-950 rounded-full">
-                  {historyLogs.length}
-                </span>
-              )}
-            </button>
+        <div className="text-[11px] text-slate-500 px-3 pt-6 pb-1.5">데이터 관리</div>
+        <nav className="flex flex-col gap-0.5" aria-label="데이터 관리">
+          <button type="button" className={navItem} onClick={() => setShowAddModal(true)}>
+            <Plus className="w-[17px] h-[17px]" /> 와인 추가
+          </button>
+          <button type="button" className={navItem} onClick={handleDownloadExcel}>
+            <Download className="w-[17px] h-[17px]" /> 엑셀 다운로드
+          </button>
+          <button type="button" className={navItem} onClick={() => fileInputRef.current?.click()}>
+            <Upload className="w-[17px] h-[17px]" /> 새 엑셀 올리기
+          </button>
+        </nav>
+        <button
+          type="button"
+          onClick={() => setShowResetConfirm(true)}
+          className="mt-2 h-10 rounded-xl border border-dashed border-red-400/35 flex items-center gap-2.5 px-3 text-[13px] text-red-300 hover:bg-red-400/10 transition"
+        >
+          <RotateCcw className="w-4 h-4" /> 초기화
+          <span className="ml-auto text-[10.5px] text-slate-500">확인 후 실행</span>
+        </button>
 
-            <button
-              onClick={handleDownloadExcel}
-              className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-emerald-600/90 active:bg-emerald-700 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-950/40 touch-manipulation"
-              title="수정본 엑셀 다운로드"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>엑셀다운</span>
-            </button>
+        <div className="mt-auto pt-3 border-t border-slate-750 flex items-center gap-2 text-[11.5px] text-slate-400 px-2">
+          <span className="w-[7px] h-[7px] rounded-full bg-emerald-400" /> 실시간 동기화 중
+        </div>
+      </aside>
 
-            <button
-              onClick={handleResetToDefault}
-              className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-slate-800 active:bg-slate-700 hover:bg-slate-650 text-slate-200 rounded-xl text-xs sm:text-sm font-medium border border-slate-700 transition touch-manipulation"
-              title="기본 데이터 복구"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-              <span>초기화</span>
-            </button>
+      {/* ───────── 가운데 본문 ───────── */}
+      <div className="min-w-0">
+        {/* 모바일 헤더 */}
+        <header className="lg:hidden sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-slate-850 px-4 pb-2.5 pt-[max(10px,env(safe-area-inset-top))] flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-wine/15 border border-wine/35 grid place-items-center text-wine-light shrink-0">
+            <Wine className="w-[18px] h-[18px]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[17px] font-bold leading-tight tracking-tight truncate">2층 와인창고</h1>
+            <p className="text-[11.5px] text-slate-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> 실시간 동기화 중
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowMoreMenu(true)}
+            aria-label="더보기 메뉴"
+            className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-750 grid place-items-center text-slate-300"
+          >
+            <MoreIcon />
+          </button>
+        </header>
 
-            <label className="flex items-center justify-center gap-1 py-1.5 sm:px-3 sm:py-2 bg-rose-600/90 hover:bg-rose-500 active:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-bold cursor-pointer transition shadow-md touch-manipulation" title="엑셀 파일 업로드">
-              <Upload className="w-3.5 h-3.5" />
-              <span>새 파일</span>
-              <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
+        <main className="px-4 lg:px-6 pt-3 lg:pt-5 pb-28 lg:pb-10 space-y-3 lg:space-y-4 max-w-[1120px] mx-auto">
+          {/* PC 상단: 검색 + 와인 추가 */}
+          <div className="hidden lg:flex gap-2.5">
+            <label className="flex-1 h-11 rounded-xl bg-slate-900 border border-slate-750 flex items-center gap-2.5 px-3.5 focus-within:border-wine">
+              <Search className="w-4 h-4 text-slate-500" />
+              <input
+                ref={searchRef}
+                type="search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="와인명(한글/영문) · 빈티지 · 메모 · 위치 검색"
+                className="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-500 focus:outline-none"
+              />
+              <kbd className="text-[11px] text-slate-400 border border-slate-700 rounded px-1.5 leading-[18px] font-sans">/</kbd>
             </label>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        {/* 데이터가 비었을 때 안내 배너 */}
-        {stockData.length === 0 && (
-          <div className="bg-gradient-to-r from-rose-950/40 via-slate-900 to-rose-950/40 border border-rose-500/40 rounded-2xl p-6 text-center space-y-3">
-            <AlertCircle className="w-10 h-10 text-rose-400 mx-auto animate-pulse" />
-            <h2 className="text-lg font-bold text-white">현재 등록된 와인 데이터가 없습니다</h2>
-            <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-              우측 상단의 <strong className="text-rose-400">[새 파일]</strong> 버튼을 눌러 소장하고 계신 최신 엑셀 파일을 선택하시면 즉시 343종 전 품목이 안전하게 복구됩니다!
-            </p>
-            <div className="pt-2">
-              <label className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-bold cursor-pointer shadow-lg transition">
-                <Upload className="w-4 h-4" />
-                <span>지금 엑셀 파일 업로드하여 복원</span>
-                <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
-              </label>
-            </div>
-          </div>
-        )}
-
-        {/* 상단 통계 */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-4">
-          <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl">
-            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-              <Wine className="w-3.5 h-3.5 text-rose-400" /> 총 보관수량
-            </span>
-            <p className="text-lg sm:text-2xl font-bold text-white mt-1 font-mono">
-              {stats.totalBottles.toLocaleString()}<span className="text-xs font-normal text-slate-400 ml-0.5">병</span>
-            </p>
-          </div>
-
-          <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl">
-            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-              <Layers className="w-3.5 h-3.5 text-blue-400" /> 와인 라벨
-            </span>
-            <p className="text-lg sm:text-2xl font-bold text-white mt-1 font-mono">
-              {stats.totalTypes}<span className="text-xs font-normal text-slate-400 ml-0.5">종</span>
-            </p>
-          </div>
-
-          <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl">
-            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" /> 소진 품목
-            </span>
-            <p className="text-lg sm:text-2xl font-bold text-amber-400 mt-1 font-mono">
-              {stats.outOfStockCount}<span className="text-xs font-normal text-slate-400 ml-0.5">개</span>
-            </p>
-          </div>
-        </div>
-
-        {/* 랙 맵 */}
-        <div className="bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3.5 sm:p-5 shadow-xl">
-          <div className="flex justify-between items-center">
-            <button 
-              onClick={() => setShowRackMap(!showRackMap)}
-              className="flex items-center gap-2 text-left w-full group touch-manipulation"
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="h-11 px-4 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-500 text-sm flex items-center gap-1.5"
             >
-              <Grid3X3 className="w-4 h-4 text-rose-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs sm:text-sm font-bold text-white block">2층 창고 랙(Rack) 전체 구조 맵</span>
-                <span className="text-[10px] sm:text-xs text-slate-400">
-                  {selectedRack === '전체' ? '터치하여 랙별 빠른 필터링' : `[${selectedRack}] 선택됨`}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 rounded-lg text-slate-300 text-xs">
-                <span>{showRackMap ? '접기' : '펼치기'}</span>
-                {showRackMap ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </div>
+              <Plus className="w-4 h-4" /> 와인 추가
             </button>
           </div>
 
-          {showRackMap && (
-            <div className="space-y-4 pt-3.5 mt-3 border-t border-slate-800">
-              {selectedRack !== '전체' && (
-                <div className="flex justify-end">
-                  <button onClick={() => setSelectedRack('전체')} className="text-xs text-rose-400 font-semibold hover:underline">
-                    ✕ 필터 초기화 (전체 랙 보기)
-                  </button>
-                </div>
-              )}
-
-              <div>
-                <span className="text-[11px] text-slate-400 font-semibold block mb-2">🧱 외곽 벽면 랙 (1번 ~ 27번)</span>
-                <div className="grid grid-cols-4 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-14 gap-1.5">
-                  {Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`).map(r => {
-                    const count = rackCountMap[r] || 0;
-                    const isSelected = selectedRack === r;
-                    return (
-                      <button
-                        key={r}
-                        onClick={() => setSelectedRack(isSelected ? '전체' : r)}
-                        className={`py-2 px-1 rounded-xl text-center flex flex-col items-center justify-center transition border touch-manipulation ${
-                          isSelected ? 'bg-rose-600 border-rose-400 text-white shadow-lg' : count > 0 ? 'bg-slate-800/90 border-slate-700/80 text-slate-200' : 'bg-slate-900/30 border-slate-800/40 text-slate-600'
-                        }`}
-                      >
-                        <span className="text-[11px] font-bold leading-tight">{r.replace('번랙', '')}번</span>
-                        <span className="text-[10px] font-mono opacity-80">{count}병</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <span className="text-[11px] text-blue-400 font-semibold block mb-2">🏢 중앙 통로 랙 (1번줄 ~ 6번줄)</span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-1.5 sm:gap-2">
-                  {['중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)'].map(r => {
-                    const count = rackCountMap[r] || 0;
-                    const isSelected = selectedRack === r;
-                    return (
-                      <button
-                        key={r}
-                        onClick={() => setSelectedRack(isSelected ? '전체' : r)}
-                        className={`px-3 py-2 rounded-xl text-xs font-semibold transition border flex items-center justify-between gap-1.5 touch-manipulation ${
-                          isSelected ? 'bg-rose-600 border-rose-400 text-white shadow-md' : count > 0 ? 'bg-slate-800/90 border-slate-700 text-slate-200' : 'bg-slate-900/40 border-slate-800 text-slate-600'
-                        }`}
-                      >
-                        <span className="truncate">{r.replace('중앙랙', '중앙')}</span>
-                        <span className={`font-mono text-[11px] font-bold shrink-0 ${isSelected ? 'text-white' : 'text-blue-400'}`}>
-                          {count}병
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <span className="text-[11px] text-amber-400 font-semibold block mb-2">📦 천장 및 박스 / 특수 보관</span>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                  {specialRacks.map(r => {
-                    const count = rackCountMap[r] || 0;
-                    const isSelected = selectedRack === r;
-                    return (
-                      <button
-                        key={r}
-                        onClick={() => setSelectedRack(isSelected ? '전체' : r)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition border flex items-center gap-1.5 touch-manipulation ${
-                          isSelected ? 'bg-rose-600 border-rose-400 text-white shadow-md' : count > 0 ? 'bg-slate-800/90 border-slate-700 text-slate-200' : 'bg-slate-900/40 border-slate-800 text-slate-600'
-                        }`}
-                      >
-                        <span>📍 {r}</span>
-                        <span className={`font-mono text-[11px] font-bold ${isSelected ? 'text-white' : 'text-amber-400'}`}>
-                          ({count}병)
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 검색 및 필터 바 */}
-        <div className="bg-slate-900/80 border border-slate-800/80 p-3 sm:p-4 rounded-2xl space-y-3">
-          <div className="relative w-full">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="와인명(한글/영문), 빈티지, 비고 메모 검색..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500"
-            />
-          </div>
-
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <select
-                value={selectedCountry}
-                onChange={(e) => setSelectedCountry(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-300 text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-rose-500 truncate"
-              >
-                {countryList.map(c => (<option key={c} value={c}>{c === '전체' ? '🌍 전체 국가' : `🌍 ${c}`}</option>))}
-              </select>
-
-              <select
-                value={selectedVintage}
-                onChange={(e) => setSelectedVintage(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-amber-300 font-mono text-xs rounded-xl px-2.5 py-2 focus:outline-none focus:border-rose-500 truncate"
-              >
-                {vintageList.map(v => (<option key={v} value={v}>{v === '전체' ? '📅 전체 빈티지' : `📅 ${v}`}</option>))}
-              </select>
-
+          {/* 데이터가 비었을 때 안내 */}
+          {stockData.length === 0 && (
+            <div className="bg-slate-900 border border-wine/40 rounded-2xl p-6 text-center space-y-3">
+              <AlertCircle className="w-9 h-9 text-wine-light mx-auto" />
+              <h2 className="text-lg font-bold text-white">등록된 와인 데이터가 없어요</h2>
+              <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
+                가지고 계신 최신 재고 엑셀 파일을 올리면 전체 품목이 바로 복구돼요.
+              </p>
               <button
-                onClick={() => setOnlyOutOfStock(!onlyOutOfStock)}
-                className={`px-2.5 py-2 text-xs font-medium rounded-xl border transition shrink-0 touch-manipulation ${
-                  onlyOutOfStock ? 'bg-amber-500/20 text-amber-400 border-amber-500/50' : 'bg-slate-950 text-slate-400 border-slate-800'
-                }`}
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-wine hover:bg-rose-600 text-white rounded-xl text-sm font-bold"
               >
-                품절만
+                <Upload className="w-4 h-4" /> 엑셀 파일 올리기
               </button>
             </div>
+          )}
 
-            <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
-              <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-slate-800 text-rose-400' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
-              <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-lg transition ${viewMode === 'table' ? 'bg-slate-800 text-rose-400' : 'text-slate-400'}`}><Table className="w-4 h-4" /></button>
-            </div>
-          </div>
-        </div>
-
-        {/* 카드 뷰 */}
-        {viewMode === 'grid' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {filteredData.map((item) => {
-              const countryStyle = COUNTRY_INFO[item.country] || { code: null, label: item.country };
-              const searchTargetName = item.englishName || item.name;
-              const vivinoSmartUrl = `https://www.google.com/search?q=${encodeURIComponent(searchTargetName + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`;
-
+          {/* 요약 숫자 */}
+          <div className="grid grid-cols-4 gap-2 lg:gap-2.5">
+            {kpis.map((k) => {
+              const clickable = !!k.filter;
+              const active = clickable && statusFilter === k.filter;
+              const toneCls =
+                k.tone === 'error' ? 'border-red-400/45 bg-red-400/10' :
+                active ? 'border-gold/70 bg-gold/10' : 'border-slate-750 bg-slate-900';
+              const valueCls = k.tone === 'error' ? 'text-red-400' : k.tone === 'warn' ? 'text-amber-400' : 'text-slate-100';
+              const Tag = clickable ? 'button' : 'div';
               return (
-                <div 
-                  key={item.id} 
-                  className="bg-slate-900/90 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-4 flex flex-col justify-between shadow-xl transition relative group"
+                <Tag
+                  key={k.label}
+                  type={clickable ? 'button' : undefined}
+                  onClick={clickable ? () => toggleStatus(k.filter) : undefined}
+                  aria-pressed={clickable ? active : undefined}
+                  className={`text-left rounded-2xl border px-2.5 py-2 lg:px-4 lg:py-3 ${toneCls} ${clickable ? 'hover:border-slate-500 transition' : ''}`}
                 >
-                  <div>
-                    {/* 상단 메타 바 */}
-                    <div className="flex items-center justify-between text-xs pb-2.5 mb-3 border-b border-slate-800/60 text-slate-400">
-                      <div className="flex items-center gap-1.5">
-                        {countryStyle.code ? (
-                          <img
-                            src={`https://flagcdn.com/w40/${countryStyle.code}.png`}
-                            alt={countryStyle.label}
-                            className="w-4 h-3 object-cover rounded-sm shadow-sm inline-block shrink-0"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span>🍷</span>
-                        )}
-                        <span className="font-medium text-slate-300">{countryStyle.label}</span>
-                        <span className="text-slate-600">·</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingVintageWine(item);
-                            setInputVintage(item.vintage || '');
-                          }}
-                          className="font-mono font-bold text-amber-300 hover:text-amber-200 hover:underline flex items-center gap-0.5 cursor-pointer touch-manipulation"
-                          title="터치하여 빈티지 수정"
-                        >
-                          <span>{item.vintage}</span>
-                          <Edit3 className="w-2.5 h-2.5 opacity-60" />
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          setEditingRackWine(item);
-                          setNewSelectedRack(item.rack);
-                        }}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-rose-400 hover:text-rose-300 border border-rose-500/20 text-[11px] font-medium transition touch-manipulation"
-                        title="터치하여 보관 랙 위치 이동"
-                      >
-                        <MapPin className="w-3 h-3" />
-                        <span>{item.rack}</span>
-                        <ChevronDown className="w-2.5 h-2.5 opacity-60" />
-                      </button>
-                    </div>
-
-                    {/* 중앙 컨텐츠 */}
-                    <div className="flex gap-3.5 items-start">
-                      {/* 사진 썸네일 */}
-                      <div className="w-20 h-24 sm:w-22 sm:h-26 shrink-0 rounded-xl bg-slate-950 border border-slate-800/80 overflow-hidden flex flex-col items-center justify-center relative">
-                        {item.customImage ? (
-                          <div 
-                            onClick={() => setZoomedWine(item)}
-                            className="w-full h-full relative cursor-pointer flex items-center justify-center group/img"
-                            title="클릭하여 사진 확대"
-                          >
-                            <img
-                              src={item.customImage}
-                              alt={item.name}
-                              className="w-full h-full object-contain p-1"
-                            />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition flex items-center justify-center text-[10px] text-white font-medium gap-0.5">
-                              <ZoomIn className="w-3.5 h-3.5" /> 확대
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setEditingImageWine(item)}
-                            className="w-full h-full flex flex-col items-center justify-center text-slate-500 hover:text-rose-400 transition gap-1 touch-manipulation"
-                            title="사진 등록"
-                          >
-                            <Camera className="w-4 h-4 opacity-60" />
-                            <span className="text-[10px] font-medium">+사진</span>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* 와인 이름 및 비고 */}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-white text-sm sm:text-base leading-snug tracking-tight line-clamp-2">
-                          {item.name}
-                        </h3>
-
-                        <div 
-                          onClick={() => {
-                            setEditingEnglishWine(item);
-                            setInputEnglishName(item.englishName || '');
-                          }}
-                          className="cursor-pointer group/en flex items-center gap-1 mt-1"
-                          title="클릭하여 영문명 직접 수정"
-                        >
-                          <p className="text-xs text-slate-400 italic font-serif leading-snug line-clamp-2 group-hover/en:text-rose-300 transition">
-                            {item.englishName || '+ 영문명 입력'}
-                          </p>
-                          <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover/en:opacity-100 shrink-0" />
-                        </div>
-
-                        <div className="mt-2">
-                          {item.note ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingNoteWine(item);
-                                setInputNote(item.note || '');
-                              }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700 hover:border-amber-500/50 hover:text-amber-300 transition truncate max-w-full touch-manipulation"
-                              title="비고(메모) 수정"
-                            >
-                              <span>🏷️ {item.note}</span>
-                              <Edit3 className="w-2.5 h-2.5 opacity-50 shrink-0" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingNoteWine(item);
-                                setInputNote('');
-                              }}
-                              className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 hover:text-slate-300 transition touch-manipulation"
-                            >
-                              <Plus className="w-2.5 h-2.5" />
-                              <span>메모 추가</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                  <div className={`text-[19px] lg:text-2xl font-bold tracking-tight tabular leading-tight ${valueCls}`}>
+                    {k.value}<span className="text-[11px] lg:text-xs font-normal text-slate-400 ml-0.5">{k.unit}</span>
                   </div>
-
-                  {/* 하단 컨트롤 바 */}
-                  <div className="pt-3 border-t border-slate-800/60 flex items-center justify-between gap-2 mt-3.5">
-                    <div className="flex items-center gap-1.5">
-                      <a
-                        href={vivinoSmartUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-800 text-rose-300/90 hover:text-rose-300 rounded-xl text-xs font-semibold border border-slate-700/80 transition touch-manipulation"
-                        title="비비노 평점 바로보기"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-rose-400" />
-                        <span>Vivino 평점</span>
-                      </a>
-
-                      <button
-                        onClick={() => setEditingImageWine(item)}
-                        className="p-1.5 bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-xl border border-slate-700/60 transition touch-manipulation"
-                        title="사진 변경"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center bg-slate-950 p-0.5 rounded-xl border border-slate-800">
-                      <button
-                        onClick={() => handleQtyChange(item.id, -1, '출고')}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-300 transition touch-manipulation"
-                        title="1병 출고"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-
-                      <div className="w-11 text-center">
-                        <span className={`text-base font-black font-mono block leading-none ${
-                          item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
-                        }`}>
-                          {item.currentQty}
-                        </span>
-                        <span className="text-[9px] text-slate-500 block mt-0.5 font-sans">현재고</span>
-                      </div>
-
-                      <button
-                        onClick={() => handleQtyChange(item.id, 1, '입고')}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-800 active:bg-slate-700 text-slate-300 transition touch-manipulation"
-                        title="1병 입고"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  <div className="text-[11px] lg:text-xs text-slate-400 mt-0.5 truncate">{k.label}</div>
+                  {k.sub && <div className="hidden lg:block text-[11px] text-slate-500 truncate">{k.sub}</div>}
+                </Tag>
               );
             })}
           </div>
-        )}
 
-        {/* 테이블 뷰 */}
-        {viewMode === 'table' && (
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="sm:hidden px-3 py-2 bg-slate-950/60 border-b border-slate-800 text-[11px] text-slate-400">
-              👉 좌우로 밀어 전체 컬럼을 확인하세요
+          {/* 중복 등록 경고 */}
+          {dupSets > 0 && (
+            <div className="flex items-start gap-2.5 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-3.5 py-2.5 text-[12.5px] lg:text-[13px]">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1 text-slate-200 leading-relaxed">
+                <b className="text-amber-200">같은 와인·빈티지·위치가 두 번 등록된 항목이 {dupSets}건</b> 있어요.
+                총 보관 숫자가 실제보다 약 {dupExtraBottles.toLocaleString()}병 많게 보일 수 있어요.
+              </div>
+              <button type="button" onClick={() => toggleStatus('오류')} className="shrink-0 text-amber-200 font-semibold hover:underline">
+                목록 ›
+              </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm border-collapse whitespace-nowrap">
-                <thead className="bg-slate-950 text-slate-400 text-xs uppercase border-b border-slate-800">
-                  <tr>
-                    <th className="px-3 sm:px-4 py-3 font-semibold">사진</th>
-                    <th className="px-3 sm:px-4 py-3 font-semibold">원산지</th>
-                    <th className="px-3 sm:px-5 py-3 font-semibold">와인명 (한글 / 영문)</th>
-                    <th className="px-2 sm:px-3 py-3 font-semibold text-center">빈티지</th>
-                    <th className="px-3 sm:px-4 py-3 font-semibold">보관위치</th>
-                    <th className="px-3 sm:px-4 py-3 font-semibold text-center">현재고</th>
-                    <th className="px-3 sm:px-4 py-3 font-semibold">비고</th>
-                    <th className="px-2 sm:px-3 py-3 font-semibold text-center">비비노</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {filteredData.map((item) => {
-                    const countryStyle = COUNTRY_INFO[item.country] || { code: null, label: item.country };
-                    return (
-                      <tr key={item.id} className="hover:bg-slate-800/40 transition">
-                        <td className="px-3 sm:px-4 py-2">
-                          {item.customImage ? (
-                            <img 
-                              src={item.customImage} 
-                              alt={item.name} 
-                              onClick={() => setZoomedWine(item)}
-                              className="w-9 h-9 object-contain rounded bg-slate-950 border border-slate-700 cursor-pointer" 
-                            />
-                          ) : (
-                            <button
-                              onClick={() => setEditingImageWine(item)}
-                              className="w-9 h-9 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 hover:text-white"
-                            >
-                              <Camera className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </td>
-                        <td className="px-3 sm:px-4 py-3 text-slate-400">
-                          <div className="flex items-center gap-1.5">
-                            {countryStyle.code ? (
-                              <img
-                                src={`https://flagcdn.com/w40/${countryStyle.code}.png`}
-                                alt={countryStyle.label}
-                                className="w-4 h-3 object-cover rounded-sm shadow-sm inline-block shrink-0"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <span>🍷</span>
-                            )}
-                            <span>{item.country}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 sm:px-5 py-3 max-w-xs">
-                          <div className="font-medium text-white truncate">{item.name}</div>
-                          <div 
-                            onClick={() => {
-                              setEditingEnglishWine(item);
-                              setInputEnglishName(item.englishName || '');
-                            }}
-                            className="text-[11px] text-slate-400 italic truncate font-serif cursor-pointer hover:text-rose-300"
-                          >
-                            {item.englishName || '+ 영문명 입력'}
-                          </div>
-                        </td>
-                        <td className="px-2 sm:px-3 py-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingVintageWine(item);
-                              setInputVintage(item.vintage || '');
-                            }}
-                            className="text-amber-300 font-mono hover:underline inline-flex items-center justify-center gap-0.5 touch-manipulation"
-                            title="클릭하여 빈티지 수정"
-                          >
-                            <span>{item.vintage}</span>
-                            <Edit3 className="w-2.5 h-2.5 opacity-50" />
-                          </button>
-                        </td>
-                        <td className="px-3 sm:px-4 py-3">
-                          <button
-                            onClick={() => {
-                              setEditingRackWine(item);
-                              setNewSelectedRack(item.rack);
-                            }}
-                            className="px-2 py-0.5 rounded text-xs bg-slate-800 text-slate-200 border border-slate-700 hover:border-rose-400 flex items-center gap-1"
-                          >
-                            <span>{item.rack}</span>
-                            <Edit3 className="w-2.5 h-2.5 text-slate-400" />
-                          </button>
-                        </td>
-                        <td className="px-3 sm:px-4 py-3">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleQtyChange(item.id, -1, '출고')}
-                              className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <span className={`w-8 text-center font-bold font-mono ${
-                              item.currentQty <= 0 ? 'text-red-400' : 'text-emerald-400'
-                            }`}>
-                              {item.currentQty}
-                            </span>
-                            <button
-                              onClick={() => handleQtyChange(item.id, 1, '입고')}
-                              className="w-7 h-7 rounded bg-slate-800 active:bg-slate-700 text-slate-200 flex items-center justify-center"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-3 sm:px-4 py-3 max-w-[140px]">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingNoteWine(item);
-                              setInputNote(item.note || '');
-                            }}
-                            className="text-left text-slate-300 hover:text-amber-300 truncate w-full flex items-center justify-between gap-1 group"
-                            title="클릭하여 비고 수정"
-                          >
-                            <span className="truncate">{item.note || '-'}</span>
-                            <Edit3 className="w-2.5 h-2.5 text-slate-500 opacity-0 group-hover:opacity-100 shrink-0" />
-                          </button>
-                        </td>
-                        <td className="px-2 sm:px-3 py-3 text-center">
-                          <a
-                            href={`https://www.google.com/search?q=${encodeURIComponent((item.englishName || item.name) + ' ' + (item.vintage !== 'NV' ? item.vintage : '') + ' vivino')}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center p-1.5 bg-slate-800 text-slate-300 rounded-lg"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          )}
+
+          {/* 재고 오류 경고 */}
+          {errorRows.length > 0 && (
+            <div className="flex items-center gap-2.5 rounded-2xl border border-red-400/30 bg-red-400/10 px-3.5 py-2.5 text-[12.5px] lg:text-[13px]">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <span className="text-red-200 font-semibold">{errorRows[0].name}</span>
+                <span className="text-slate-300"> ({errorRows[0].vintage} · {rackLabel(errorRows[0].rack)}) 현재고 </span>
+                <b className="text-red-300 tabular">{errorRows[0].currentQty}병</b>
+                {errorRows.length > 1 && <span className="text-slate-400"> 외 {errorRows.length - 1}건</span>}
+              </div>
+              <button
+                type="button"
+                onClick={() => { if (errorRows.length > 1) toggleStatus('오류'); openRow(errorRows[0]); }}
+                className="shrink-0 text-red-200 font-semibold hover:underline"
+              >
+                확인 ›
+              </button>
+            </div>
+          )}
+
+          <RackMap
+            rackCountMap={rackCountMap}
+            specialRacks={specialRacks}
+            selectedRack={selectedRack}
+            onSelect={(r) => setSelectedRack(r)}
+          />
+
+          {/* 모바일 검색 */}
+          <label className="lg:hidden h-11 rounded-xl bg-slate-900 border border-slate-750 flex items-center gap-2.5 px-3.5 focus-within:border-wine">
+            <Search className="w-4 h-4 text-slate-500" />
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="와인명 · 빈티지 · 메모 검색"
+              className="flex-1 bg-transparent text-[15px] text-slate-100 placeholder-slate-500 focus:outline-none"
+            />
+          </label>
+
+          <div id="wine-list" className="scroll-mt-20 space-y-2.5">
+            <FilterBar
+              countries={countryList}
+              vintages={vintageOptions}
+              selectedCountry={selectedCountry}
+              onCountry={setSelectedCountry}
+              vintageFrom={vintageFrom}
+              vintageTo={vintageTo}
+              onVintageFrom={setVintageFrom}
+              onVintageTo={setVintageTo}
+              statusFilter={statusFilter}
+              onStatus={setStatusFilter}
+              sortBy={sortBy}
+              onSort={setSortBy}
+              selectedRack={selectedRack}
+              onRack={setSelectedRack}
+              showSort={!isDesktop}
+              resultText={
+                <span className="flex items-center gap-2">
+                  <span>
+                    <b className="text-slate-100 font-semibold">{groups.length}종 · {filteredBottles.toLocaleString()}병</b>
+                    {anyFilter ? ' 표시 중' : ' 전체'}
+                    <span className="text-slate-500"> · 같은 와인은 빈티지별로 묶음</span>
+                  </span>
+                  {anyFilter && (
+                    <button type="button" onClick={clearFilters} className="ml-auto text-slate-300 underline underline-offset-2 hover:text-white">
+                      필터 모두 해제
+                    </button>
+                  )}
+                </span>
+              }
+            />
+
+            {groups.length === 0 ? (
+              <div className="rounded-2xl border border-slate-750 bg-slate-900 px-4 py-10 text-center text-sm text-slate-400">
+                조건에 맞는 와인이 없어요.
+                {anyFilter && (
+                  <button type="button" onClick={clearFilters} className="block mx-auto mt-2 text-slate-200 underline underline-offset-2">
+                    필터 모두 해제
+                  </button>
+                )}
+              </div>
+            ) : isDesktop ? (
+              <GroupTable
+                groups={groups}
+                onOpen={openWine}
+                selectedKey={selection?.key}
+                selectedRowId={selection?.rowId}
+                sortBy={sortBy}
+                onSort={setSortBy}
+              />
+            ) : (
+              <GroupCards groups={groups} onOpen={openWine} selectedKey={selection?.key} selectedRowId={selection?.rowId} />
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* ───────── PC 오른쪽: 선택한 와인 패널 ───────── */}
+      <aside className="hidden xl:block sticky top-0 h-screen border-l border-slate-750 bg-[#141115]">
+        {isWide && (panel || (
+          <div className="h-full flex flex-col px-5 py-5">
+            <div className="rounded-2xl border border-dashed border-slate-700 px-5 py-8 text-center">
+              <InOutIcon className="w-7 h-7 mx-auto text-slate-500" />
+              <p className="mt-3 text-sm text-slate-200 font-semibold">와인을 고르면 여기서 입출고를 기록해요</p>
+              <p className="mt-1 text-xs text-slate-400">목록에서 와인이나 빈티지 칩을 눌러 보세요.</p>
+            </div>
+            <div className="mt-6 text-xs text-slate-400 mb-2">최근 입출고</div>
+            <ul className="space-y-1 overflow-y-auto">
+              {historyLogs.slice(0, 8).map((l) => {
+                const row = stockData.find(r => r.id === l.wineId);
+                return (
+                  <li key={l.logId}>
+                    <button
+                      type="button"
+                      disabled={!row}
+                      onClick={() => row && openRow(row)}
+                      className="w-full text-left rounded-xl px-2.5 py-2 hover:bg-slate-850 disabled:hover:bg-transparent"
+                    >
+                      <div className="flex items-center gap-2 text-[12.5px]">
+                        <span className="text-slate-100 truncate">{l.name}</span>
+                        <span className="text-gold tabular shrink-0">{l.vintage}</span>
+                        <span className="ml-auto text-[11px] text-slate-500 tabular shrink-0">{String(l.time || '').slice(5, 16)}</span>
+                      </div>
+                      <div className="text-[11.5px] text-slate-400 truncate">{l.reason}</div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </aside>
+
+      {/* ───────── 모바일·태블릿: 아래에서 올라오는 기록 시트 ───────── */}
+      {!isWide && selectedGroup && (
+        <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="입출고 기록">
+          <div className="absolute inset-0 bg-black/60" onClick={closeWine} />
+          <div className="absolute inset-x-0 bottom-0 top-[7vh] lg:top-0 lg:left-auto lg:w-[420px] bg-[#171318] rounded-t-3xl lg:rounded-none border-t lg:border-t-0 lg:border-l border-slate-700 flex flex-col pb-safe">
+            <div className="lg:hidden w-10 h-1.5 rounded-full bg-slate-700 mx-auto mt-2.5 shrink-0" />
+            {panel}
+          </div>
+        </div>
+      )}
+
+      {/* ───────── 모바일 하단 탭 ───────── */}
+      <nav className="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-[#120f13]/95 backdrop-blur border-t border-slate-750 pb-safe" aria-label="하단 메뉴">
+        <div className="grid grid-cols-5 h-[62px] items-center">
+          <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-100">
+            <ListIcon className="w-[22px] h-[22px]" /> 재고
+          </button>
+          <button type="button" onClick={() => scrollToId('rack-map')} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
+            <Grid3X3 className="w-[22px] h-[22px]" /> 랙 맵
+          </button>
+          <button type="button" onClick={() => { setPickerTerm(''); setShowPicker(true); }} className="flex flex-col items-center -mt-6" aria-label="입출고 기록하기">
+            <span className="w-[54px] h-[54px] rounded-[18px] bg-wine grid place-items-center text-white shadow-lg shadow-wine/40">
+              <InOutIcon className="w-6 h-6" />
+            </span>
+            <span className="text-[10.5px] text-rose-200 mt-1">입출고</span>
+          </button>
+          <button type="button" onClick={() => setShowLogModal(true)} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
+            <span className="relative">
+              <History className="w-[22px] h-[22px]" />
+              {historyLogs.length > 0 && (
+                <span className="absolute -top-1.5 -right-3 bg-amber-500 text-gold-dark text-[9px] font-bold rounded-full px-1 leading-[14px] tabular">{historyLogs.length}</span>
+              )}
+            </span>
+            이력
+          </button>
+          <button type="button" onClick={() => setShowMoreMenu(true)} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
+            <MoreIcon className="w-[22px] h-[22px]" /> 더보기
+          </button>
+        </div>
+      </nav>
+
+      {/* ───────── 더보기 메뉴 (모바일) ───────── */}
+      {showMoreMenu && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="더보기 메뉴">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowMoreMenu(false)} />
+          <div className="absolute inset-x-0 bottom-0 bg-[#171318] rounded-t-3xl border-t border-slate-700 px-4 pt-2.5 pb-safe">
+            <div className="w-10 h-1.5 rounded-full bg-slate-700 mx-auto mb-3" />
+            <div className="space-y-1 pb-4">
+              {[
+                { icon: Plus, label: '와인 추가', onClick: () => setShowAddModal(true) },
+                { icon: Download, label: '엑셀 다운로드', onClick: handleDownloadExcel },
+                { icon: Upload, label: '새 엑셀 올리기', onClick: () => fileInputRef.current?.click() },
+                { icon: History, label: '입출고 이력', onClick: () => setShowLogModal(true) },
+              ].map(({ icon: Icon, label, onClick }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => { setShowMoreMenu(false); onClick(); }}
+                  className="w-full h-12 rounded-xl flex items-center gap-3 px-3 text-[15px] text-slate-100 hover:bg-slate-850"
+                >
+                  <Icon className="w-5 h-5 text-slate-400" /> {label}
+                </button>
+              ))}
+              <div className="h-px bg-slate-750 my-2" />
+              <button
+                type="button"
+                onClick={() => { setShowMoreMenu(false); setShowResetConfirm(true); }}
+                className="w-full rounded-xl flex items-start gap-3 px-3 py-2.5 text-left hover:bg-red-400/10"
+              >
+                <RotateCcw className="w-5 h-5 text-red-400 mt-0.5" />
+                <span>
+                  <span className="block text-[15px] text-red-300">초기화</span>
+                  <span className="block text-xs text-slate-500">기본 엑셀로 전체 재고를 덮어써요. 한 번 더 확인해요.</span>
+                </span>
+              </button>
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      )}
+
+      {/* ───────── 입출고할 와인 고르기 (모바일 가운데 버튼) ───────── */}
+      {showPicker && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="입출고할 와인 고르기">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowPicker(false)} />
+          <div className="absolute inset-x-0 bottom-0 top-[7vh] bg-[#171318] rounded-t-3xl border-t border-slate-700 flex flex-col pb-safe">
+            <div className="w-10 h-1.5 rounded-full bg-slate-700 mx-auto mt-2.5 shrink-0" />
+            <div className="px-4 pt-3 pb-2 shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-base font-bold">어떤 와인을 기록할까요?</h2>
+                <button type="button" onClick={() => setShowPicker(false)} aria-label="닫기" className="w-8 h-8 rounded-lg border border-slate-700 grid place-items-center text-slate-400">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <label className="h-11 rounded-xl bg-slate-900 border border-slate-750 flex items-center gap-2.5 px-3.5 focus-within:border-wine">
+                <Search className="w-4 h-4 text-slate-500" />
+                <input
+                  type="search"
+                  autoFocus
+                  value={pickerTerm}
+                  onChange={(e) => setPickerTerm(e.target.value)}
+                  placeholder="와인 이름으로 찾기"
+                  className="flex-1 bg-transparent text-[15px] text-slate-100 placeholder-slate-500 focus:outline-none"
+                />
+              </label>
+            </div>
+            <ul className="flex-1 overflow-y-auto px-2 pb-4">
+              {pickerGroups.map((g) => (
+                <li key={g.key}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowPicker(false); openWine(g, g.rows[0].id); }}
+                    className="w-full text-left rounded-xl px-2.5 py-2.5 hover:bg-slate-850 flex items-center gap-3"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14.5px] text-slate-100 truncate">{g.name}</span>
+                      <span className="block text-[12px] text-slate-400 truncate">
+                        {rackLabel(g.primaryRack)} · 빈티지 {g.rows.length}개
+                      </span>
+                    </span>
+                    <span className="text-base font-bold tabular">{g.totalQty}<span className="text-[11px] font-normal text-slate-400">병</span></span>
+                  </button>
+                </li>
+              ))}
+              {pickerGroups.length === 0 && <li className="px-3 py-8 text-center text-sm text-slate-400">찾는 와인이 없어요.</li>}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* ───────── 초기화 확인 ───────── */}
+      {showResetConfirm && (
+        <ResetConfirm onCancel={() => setShowResetConfirm(false)} onConfirm={handleResetToDefault} />
+      )}
+
+      {/* ───────── 알림 ───────── */}
+      {toast && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-24 lg:bottom-6 z-[60] max-w-[90vw] px-4 py-2.5 rounded-xl bg-slate-100 text-slate-950 text-[13px] font-medium shadow-xl" role="status">
+          {toast}
+        </div>
+      )}
 
       {/* 빈티지 수정 모달 */}
       {editingVintageWine && (
@@ -1936,6 +1940,9 @@ export default function App() {
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-300">정확한 영문 와인명 입력</label>
               <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
+              {editingEnglishWine.groupIds && editingEnglishWine.groupIds.length > 1 && (
+                <p className="text-[11px] text-slate-500">같은 와인의 빈티지 {editingEnglishWine.groupIds.length}개에 함께 적용돼요.</p>
+              )}
             </div>
             <div className="pt-3 border-t border-slate-800 flex gap-2">
               <button onClick={() => setEditingEnglishWine(null)} className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs">취소</button>
@@ -2192,6 +2199,52 @@ export default function App() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+// 초기화 전 한 번 더 확인 (실수로 누르는 것 방지: '초기화'를 직접 입력해야 실행)
+function ResetConfirm({ onCancel, onConfirm }) {
+  const [text, setText] = useState('');
+  const ready = text.trim() === '초기화';
+  return (
+    <div className="fixed inset-0 z-[55] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-labelledby="reset-title">
+      <div className="bg-slate-900 border border-red-400/40 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-400/15 grid place-items-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-red-400" />
+          </div>
+          <div>
+            <h3 id="reset-title" className="font-bold text-white text-base">전체 재고를 초기화할까요?</h3>
+            <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+              서버에 있는 기본 엑셀(wine_data.xlsx) 내용으로 <b className="text-red-300">모든 와인의 수량·위치·메모를 덮어쓰고, 등록한 사진도 지워져요.</b> 되돌릴 수 없으니, 먼저 엑셀 다운로드로 지금 상태를 저장해 두세요.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="reset-confirm-input" className="block text-xs text-slate-400">계속하려면 <b className="text-slate-200">초기화</b>라고 입력하세요</label>
+          <input
+            id="reset-confirm-input"
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            autoFocus
+            className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-red-400"
+          />
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={onCancel} className="flex-1 py-2.5 bg-slate-800 text-slate-200 rounded-xl text-sm">
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!ready}
+            className="flex-1 py-2.5 bg-red-500 hover:bg-red-400 text-white rounded-xl text-sm font-bold disabled:opacity-40 disabled:hover:bg-red-500"
+          >
+            초기화 실행
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
