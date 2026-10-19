@@ -6,12 +6,13 @@ import {
   ExternalLink, Plus,
   Grid3X3, History, RotateCcw, X, Camera, RefreshCw,
   PlusCircle, Trash2,
-  Edit3, MapPin, AlertCircle, AlertTriangle, Check
+  Edit3, MapPin, AlertCircle, AlertTriangle
 } from 'lucide-react';
 import RackMap from './components/RackMap';
 import RecordPanel from './components/RecordPanel';
 import FilterBar from './components/FilterBar';
 import { GroupCards, GroupTable } from './components/WineList';
+import SyncReview from './components/SyncReview';
 import { MoreIcon, InOutIcon, ListIcon } from './components/icons';
 import {
   WALL_RACKS, CENTER_RACKS, rackMatches, rackLabel, vintageNumber,
@@ -918,13 +919,19 @@ export default function App() {
         const matchedWebIds = new Set();
         const excelWithMatch = [];
 
+        // 같은 항목이 서버에 여러 개(중복)일 때는 사진·메모가 있거나 엑셀 수량과 같은 쪽을 남깁니다.
+        const pickBest = (cands, excelItem) => cands.sort((a, b) => {
+          const score = (w) => (w.customImage ? 4 : 0) + (w.note ? 2 : 0) + (w.currentQty === excelItem.currentQty ? 1 : 0);
+          return score(b) - score(a) || a.id - b.id;
+        })[0];
+
         excelRows.forEach((excelItem) => {
-          const exactMatch = baseRows.find(
+          const exactMatch = pickBest(baseRows.filter(
             w => !matchedWebIds.has(w.id) &&
                  w.name === excelItem.name &&
                  w.vintage === excelItem.vintage &&
                  w.rack === excelItem.rack
-          );
+          ), excelItem);
           if (exactMatch) {
             matchedWebIds.add(exactMatch.id);
             excelWithMatch.push({ excelItem, match: exactMatch });
@@ -935,11 +942,11 @@ export default function App() {
 
         excelWithMatch.forEach((item) => {
           if (!item.match) {
-            const looseMatch = baseRows.find(
+            const looseMatch = pickBest(baseRows.filter(
               w => !matchedWebIds.has(w.id) &&
                    w.name === item.excelItem.name &&
                    w.vintage === item.excelItem.vintage
-            );
+            ), item.excelItem);
             if (looseMatch) {
               matchedWebIds.add(looseMatch.id);
               item.match = looseMatch;
@@ -968,8 +975,21 @@ export default function App() {
           }
         });
 
-        if (diffs.length > 0) {
-          setDiffModalData({ excelWithMatch, diffs });
+        // 엑셀과 짝이 맞지 않은 서버 항목: 엑셀에 같은 와인·빈티지가 있으면 '중복', 없으면 '엑셀에 없음'
+        const excelKeys = new Set(excelRows.map(x => `${x.name}__${x.vintage}`));
+        const unmatched = baseRows.filter(w => !matchedWebIds.has(w.id));
+        const dupRows = unmatched.filter(w => excelKeys.has(`${w.name}__${w.vintage}`));
+        const missingRows = unmatched.filter(w => !excelKeys.has(`${w.name}__${w.vintage}`));
+        const newCount = excelWithMatch.filter(x => !x.match).length;
+
+        if (diffs.length > 0 || unmatched.length > 0) {
+          setDiffModalData({
+            excelWithMatch, diffs, dupRows, missingRows, newCount,
+            excelCount: excelRows.length,
+            excelBottles: excelRows.reduce((sum, x) => sum + (x.currentQty || 0), 0),
+            serverCount: baseRows.length,
+            serverBottles: baseRows.reduce((sum, x) => sum + (x.currentQty || 0), 0),
+          });
           setLoading(false);
         } else {
           executeSmartMerge(excelWithMatch, `총 ${excelRows.length}개 와인이 안전하게 업로드 반영되었습니다!`);
@@ -985,7 +1005,8 @@ export default function App() {
   };
 
   // [핵심 해결] ID 오버플로우 방지 순차 정수 ID + 배치 Upsert
-  const executeSmartMerge = async (excelWithMatchList, successMessage = "엑셀 데이터가 안전하게 병합 반영되었습니다.") => {
+  // deleteIds: 엑셀 기준으로 맞출 때 지울 서버 항목, keepRows: 지우지 않고 남겨 둘 항목
+  const executeSmartMerge = async (excelWithMatchList, successMessage = "엑셀 데이터가 안전하게 병합 반영되었습니다.", { deleteIds = [], keepRows = [] } = {}) => {
     setLoading(true);
     try {
       const { data: currentDbWines } = await supabase.from('wines').select('id, name, vintage, rack, custom_image, note, english_name');
@@ -1066,7 +1087,14 @@ export default function App() {
         if (batchErr) throw batchErr;
       }
 
-      setStockData(safeMergedList.map(r => mapFromDb(r)));
+      // 엑셀 기준으로 맞추기: 중복 등 선택한 항목 삭제 (100개씩)
+      for (let i = 0; i < deleteIds.length; i += BATCH_SIZE) {
+        const batch = deleteIds.slice(i, i + BATCH_SIZE);
+        const { error: delErr } = await supabase.from('wines').delete().in('id', batch);
+        if (delErr) throw delErr;
+      }
+
+      setStockData([...safeMergedList.map(r => mapFromDb(r)), ...keepRows]);
       setDiffModalData(null);
       alert(successMessage);
     } catch (err) {
@@ -1838,58 +1866,27 @@ export default function App() {
         </div>
       )}
 
-      {/* 엑셀 검증 모달 */}
+      {/* 엑셀 반영 전 검토 */}
       {diffModalData && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">재고 정밀 검증</span>
-                <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-1.5 mt-0.5">
-                  <AlertCircle className="w-5 h-5 text-amber-400" /> 업로드 엑셀 실제 변경점 감지 ({diffModalData.diffs.length}건)
-                </h3>
-              </div>
-              <button onClick={() => setDiffModalData(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="p-4 sm:p-5 flex-1 overflow-y-auto space-y-3">
-              <p className="text-xs text-slate-300 bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl leading-relaxed">
-                ⚠️ 현장 창고에서 수정된 내역과 엑셀 간에 수량 또는 위치 차이가 있는 항목입니다. 확인 후 병합해 주세요. (기존 등록 사진과 비고는 안전하게 보존됩니다)
-              </p>
-
-              <div className="space-y-2 pt-1">
-                {diffModalData.diffs.map((d, i) => (
-                  <div key={i} className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-1.5 text-xs">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-white text-sm">{d.name}</span>
-                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono text-[11px]">{d.vintage}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 pt-1 text-slate-300">
-                      <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-                        <span className="text-[10px] text-slate-400 block mb-0.5">현재 웹 상태</span>
-                        {d.qtyChanged && <span className="text-rose-400 font-bold block">재고: {d.webQty}병</span>}
-                        {d.rackChanged && <span className="text-rose-400 font-bold block">위치: 📍 {d.webRack}</span>}
-                      </div>
-                      <div className="bg-slate-900 p-2 rounded-lg border border-slate-800">
-                        <span className="text-[10px] text-slate-400 block mb-0.5">엑셀 내용</span>
-                        {d.qtyChanged && <span className="text-emerald-400 font-bold block">재고: {d.excelQty}병</span>}
-                        {d.rackChanged && <span className="text-emerald-400 font-bold block">위치: 📍 {d.excelRack}</span>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-950 border-t border-slate-800 flex gap-2">
-              <button onClick={() => setDiffModalData(null)} className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold">취소</button>
-              <button onClick={() => executeSmartMerge(diffModalData.excelWithMatch, "검증된 엑셀 데이터가 안전하게 병합 반영되었습니다.")} className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-lg flex items-center justify-center gap-1.5">
-                <Check className="w-4 h-4 stroke-[3]" />
-                <span>엑셀 내용으로 병합 적용 (사진 보존)</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <SyncReview
+          data={diffModalData}
+          onCancel={() => setDiffModalData(null)}
+          onApply={({ deleteDup, deleteMissing, backup }) => {
+            if (backup) handleDownloadExcel();
+            const del = new Set([
+              ...(deleteDup ? diffModalData.dupRows.map(r => r.id) : []),
+              ...(deleteMissing ? diffModalData.missingRows.map(r => r.id) : []),
+            ]);
+            const keepRows = [...diffModalData.dupRows, ...diffModalData.missingRows].filter(r => !del.has(r.id));
+            executeSmartMerge(
+              diffModalData.excelWithMatch,
+              del.size > 0
+                ? `엑셀 기준으로 맞췄어요. ${diffModalData.excelWithMatch.length}개 항목 반영, ${del.size}개 항목 삭제.`
+                : '엑셀 내용이 반영됐어요.',
+              { deleteIds: [...del], keepRows }
+            );
+          }}
+        />
       )}
 
       {/* 랙 이동 모달 */}
