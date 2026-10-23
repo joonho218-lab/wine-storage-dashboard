@@ -18,7 +18,7 @@ Deno.serve(async req => {
   try {
     const body = await req.json();
     if (body.action === 'change-password') {
-      if (typeof body.password !== 'string' || body.password.length < 10 || body.password.length > 128) return json({ error: '비밀번호를 10~128자로 설정해 주세요.' }, 400);
+      if (typeof body.password !== 'string' || body.password.length < 8 || body.password.length > 128) return json({ error: '비밀번호를 8~128자로 설정해 주세요.' }, 400);
       const { error } = await admin.auth.admin.updateUserById(user.id, { password: body.password });
       if (error) return json({ error: '비밀번호를 변경하지 못했어요. 다른 비밀번호를 시도해 주세요.' }, 400);
       const { error: profileError } = await admin.from('team_members').update({ needs_password_change: false }).eq('user_id', user.id);

@@ -61,7 +61,7 @@ export default function TeamAccess() {
   async function changePassword(event) {
     event.preventDefault();
     if (busy) return;
-    if (password.length < 10 || password !== confirm) { setError('비밀번호를 10자 이상 입력하고 두 칸을 같게 맞춰 주세요.'); return; }
+    if (password.length < 8 || password !== confirm) { setError('비밀번호를 8자 이상 입력하고 두 칸을 같게 맞춰 주세요.'); return; }
     setBusy(true); setError('');
     try {
       const { data, error: changeError } = await supabase.functions.invoke('wine-team-account', { body: { action: 'change-password', password } });
@@ -106,12 +106,12 @@ export default function TeamAccess() {
         <p className="text-sm text-slate-400 mt-3 leading-relaxed">{needsPassword ? `${member.display_name}님, 사용할 비밀번호를 설정해 주세요.` : '이름으로 로그인하면 재고 변경에 수정한 사람과 시간이 자동으로 기록됩니다.'}</p>
         {(!session || needsPassword) && <form onSubmit={needsPassword ? changePassword : signIn} className="mt-6 space-y-4">
           {!needsPassword && <label className="block text-sm">이름<input className={inputStyle} autoComplete="username" value={name} onChange={e => setName(e.target.value)} required placeholder="본인 이름" /></label>}
-          <label className="block text-sm">{needsPassword ? '새 비밀번호 (10자 이상)' : '비밀번호'}<input type="password" className={inputStyle} autoComplete={needsPassword ? 'new-password' : 'current-password'} minLength={needsPassword ? 10 : undefined} value={password} onChange={e => setPassword(e.target.value)} required /></label>
+          <label className="block text-sm">{needsPassword ? '새 비밀번호 (8자 이상, 숫자만 가능)' : '비밀번호'}<input type="password" className={inputStyle} autoComplete={needsPassword ? 'new-password' : 'current-password'} minLength={needsPassword ? 8 : undefined} value={password} onChange={e => setPassword(e.target.value)} required /></label>
           {needsPassword && <label className="block text-sm">새 비밀번호 확인<input type="password" className={inputStyle} autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} required /></label>}
           <button className={`${buttonStyle} w-full`} disabled={busy}>{busy ? '처리 중…' : needsPassword ? '저장하고 시작하기' : '로그인'}</button>
         </form>}
         {error && <p role="alert" className="mt-4 text-sm text-red-300">{error}</p>}
-        <p className="mt-5 text-xs text-slate-500">{needsPassword ? '생년월일처럼 다른 사람이 알기 쉬운 정보는 피해주세요.' : '처음 로그인할 때는 전달받은 임시 비밀번호를 사용해 주세요. 비밀번호를 잊으면 관리자에게 문의해 주세요.'}</p>
+        <p className="mt-5 text-xs text-slate-500">{needsPassword ? '숫자 8자리도 사용할 수 있어요. 수정자 기록을 위해 비밀번호는 본인만 사용해 주세요.' : '처음 로그인할 때는 전달받은 임시 비밀번호를 사용해 주세요. 비밀번호를 잊으면 관리자에게 문의해 주세요.'}</p>
         {session && <button onClick={signOut} className="mt-4 text-sm underline text-slate-400">{changing && !member?.needs_password_change ? '로그아웃' : '다른 계정으로 로그인'}</button>}
         {changing && !member?.needs_password_change && <button onClick={() => { setChanging(false); setPassword(''); setConfirm(''); setError(''); }} className="ml-4 text-sm underline">취소</button>}
       </section>
