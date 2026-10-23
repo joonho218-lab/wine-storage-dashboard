@@ -297,7 +297,7 @@ export default function RecordPanel({
         <div className="mt-5 pt-3 border-t border-slate-750">
           <div className="text-xs text-slate-400 mb-1.5">이 와인 최근 기록</div>
           {recentLogs.length === 0 ? (
-            <p className="text-xs text-slate-500 py-1">최근 50건 안에는 기록이 없어요.</p>
+            <p className="text-xs text-slate-500 py-1">불러온 이력에는 기록이 없어요. 전체 이력에서 이전 기록을 확인해 주세요.</p>
           ) : (
             <ul className="space-y-1">
               {recentLogs.map((l) => {
@@ -317,7 +317,7 @@ export default function RecordPanel({
                       {l.vintage}
                       {l.delta ? ` · ${Math.abs(l.delta)}병` : ''}
                     </span>
-                    <span className="ml-auto text-slate-500 truncate">{l.reason}</span>
+                    <span className="ml-auto text-slate-500 truncate">{l.actorName} · {l.reason}</span>
                   </li>
                 );
               })}
