@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { loginEmail } from '../lib/team';
 import App from '../App';
+import TeamManager from './TeamManager';
 
 const inputStyle = 'w-full mt-2 rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-white focus:outline-none focus:border-rose-400';
 const buttonStyle = 'rounded-xl px-4 py-3 bg-rose-700 hover:bg-rose-600 text-white font-semibold disabled:opacity-50';
@@ -17,8 +18,6 @@ export default function TeamAccess() {
   const [busy, setBusy] = useState(false);
   const [changing, setChanging] = useState(false);
   const [managing, setManaging] = useState(false);
-  const [members, setMembers] = useState([]);
-  const [resetResult, setResetResult] = useState(null);
 
   useEffect(() => {
     let live = true;
@@ -72,28 +71,10 @@ export default function TeamAccess() {
     finally { setBusy(false); }
   }
 
-  async function openManagement() {
-    setManaging(true); setResetResult(null); setError('');
-    const { data, error: listError } = await supabase.from('team_members').select('user_id,display_name,role,active').order('display_name');
-    if (listError) setError('팀원 정보를 불러오지 못했어요.');
-    else setMembers(data || []);
-  }
-
-  async function resetPassword(person) {
-    if (busy || !window.confirm(`${person.display_name}님의 비밀번호를 임시 비밀번호로 재설정할까요?`)) return;
-    setBusy(true); setError(''); setResetResult(null);
-    try {
-      const { data, error: resetError } = await supabase.functions.invoke('wine-team-account', { body: { action: 'reset-password', user_id: person.user_id } });
-      if (resetError || data?.error) throw new Error(data?.error || '비밀번호를 재설정하지 못했어요.');
-      setResetResult({ name: person.display_name, password: data.password });
-    } catch (err) { setError(err.message); }
-    finally { setBusy(false); }
-  }
-
   async function signOut() {
     const { error: signOutError } = await supabase.auth.signOut();
     if (signOutError) { setError('로그아웃하지 못했어요. 연결을 확인해 주세요.'); return; }
-    setMember(null); setSession(null); setPassword(''); setConfirm(''); setChanging(false); setManaging(false); setResetResult(null); setError('');
+    setMember(null); setSession(null); setPassword(''); setConfirm(''); setChanging(false); setManaging(false); setError('');
   }
 
   if (loading) return <div className="min-h-screen bg-slate-950 text-slate-300 grid place-items-center">계정 확인 중…</div>;
@@ -122,19 +103,12 @@ export default function TeamAccess() {
     <div className="sticky top-0 z-40 bg-slate-900 border-b border-slate-700 text-slate-200 flex flex-wrap gap-3 items-center px-4 py-2 text-xs">
       <strong>{member.display_name} · {member.role === 'admin' ? '관리자' : '팀원'}</strong>
       <span className="text-slate-400 mr-auto">변경 내용은 이름과 함께 기록됩니다</span>
-      {member.role === 'admin' && <button onClick={openManagement}>팀원 관리</button>}
+      {member.role === 'admin' && <button onClick={() => setManaging(true)}>팀원 관리</button>}
       <button onClick={() => { setPassword(''); setConfirm(''); setError(''); setChanging(true); }}>비밀번호 변경</button>
       <button onClick={signOut}>로그아웃</button>
     </div>
     {error && <p role="alert" className="bg-red-950 p-3 text-red-200 text-sm">{error}</p>}
     <App key={member.user_id} member={member} />
-    {managing && <div className="fixed inset-0 z-[70] bg-black/80 grid place-items-center p-4">
-      <section role="dialog" aria-modal="true" aria-labelledby="team-title" className="bg-slate-900 text-white p-6 rounded-2xl border border-slate-700 w-full max-w-lg max-h-[85vh] overflow-auto">
-        <div className="flex justify-between gap-4 mb-5"><h2 id="team-title" className="text-xl font-bold">팀원 관리</h2><button onClick={() => { setManaging(false); setResetResult(null); }}>닫기</button></div>
-        <p className="text-sm text-slate-400 mb-4">임시 비밀번호는 해당 팀원에게 개별 전달해 주세요. 기존 비밀번호는 확인할 수 없습니다.</p>
-        {members.map(person => <div key={person.user_id} className="flex justify-between items-center gap-3 border-t border-slate-800 py-3"><span>{person.display_name} · {person.role === 'admin' ? '관리자' : '팀원'}</span>{person.user_id !== member.user_id && <button disabled={busy} className="text-sm text-rose-300 disabled:opacity-40" onClick={() => resetPassword(person)}>비밀번호 재설정</button>}</div>)}
-        {resetResult && <div className="mt-4 p-4 rounded-xl bg-slate-950"><p>{resetResult.name}님 임시 비밀번호</p><p className="font-mono text-lg select-all break-all mt-2">{resetResult.password}</p><p className="text-xs text-slate-400 mt-2">이 창을 닫으면 표시가 사라집니다. 첫 로그인 후 새 비밀번호를 설정해야 합니다.</p></div>}
-      </section>
-    </div>}
+    {managing && <TeamManager me={member} onClose={() => setManaging(false)} />}
   </>;
 }
