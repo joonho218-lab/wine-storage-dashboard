@@ -13,6 +13,9 @@ import RecordPanel from './components/RecordPanel';
 import FilterBar from './components/FilterBar';
 import { GroupCards, GroupTable } from './components/WineList';
 import SyncReview from './components/SyncReview';
+import CheckPanel from './components/CheckPanel';
+import { findIssues } from './lib/checks';
+import { downloadStyledExcel } from './lib/exportExcel';
 import { MoreIcon, InOutIcon, ListIcon } from './components/icons';
 import {
   WALL_RACKS, CENTER_RACKS, rackMatches, rackLabel, vintageNumber,
@@ -366,6 +369,9 @@ export default function App({ member }) {
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTerm, setPickerTerm] = useState('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showCheckPanel, setShowCheckPanel] = useState(false);
+  const [acks, setAcks] = useState(() => new Map()); // 점검 확인 완료 기록 (signature → 기록)
+  const [acksAvailable, setAcksAvailable] = useState(false);
   const [toast, setToast] = useState('');
   const isWide = useMediaQuery('(min-width: 1280px)');
   const isDesktop = useMediaQuery('(min-width: 1024px)');
@@ -1026,8 +1032,19 @@ export default function App({ member }) {
     }
   };
 
-  const handleDownloadExcel = () => {
+  // 보기 좋은 엑셀(색·테두리·합계·랙별 요약). 서식 라이브러리를 못 불러오면 예전 기본 엑셀로 받아요.
+  const handleDownloadExcel = async () => {
     if (stockData.length === 0) return;
+    try {
+      await downloadStyledExcel({ stock: stockData, logs: historyLogs, who: member?.display_name || '' });
+      return;
+    } catch (err) {
+      console.error('서식 엑셀 생성 실패, 기본 엑셀로 내려받기:', err);
+    }
+    handlePlainExcel();
+  };
+
+  const handlePlainExcel = () => {
     const stockSheetData = [
       ['와 인 재 고 현 황'],
       ['원산지', '와인명(한글)', '빈티지', '보관위치', '총 입고량', '총 출고량', '현재고', '상태', '비고', '이미지링크', '영문명']
@@ -1078,26 +1095,47 @@ export default function App({ member }) {
     return Array.from(new Set(nums)).sort((a, b) => a - b);
   }, [stockData]);
 
-  // 같은 와인·빈티지·위치가 두 번 이상 등록된 행 (엑셀 업로드가 겹쳐 생긴 중복)
-  const { dupIds, dupSets, dupExtraBottles } = useMemo(() => {
-    const byKey = new Map();
-    stockData.forEach(r => {
-      const k = `${r.name}__${r.vintage}__${r.rack}`;
-      if (!byKey.has(k)) byKey.set(k, []);
-      byKey.get(k).push(r);
-    });
-    const ids = new Set();
-    let sets = 0;
-    let extra = 0;
-    byKey.forEach(list => {
-      if (list.length < 2) return;
-      sets += 1;
-      list.forEach(r => ids.add(r.id));
-      const qtys = list.map(r => r.currentQty || 0).sort((a, b) => b - a);
-      extra += qtys.slice(1).reduce((s2, q) => s2 + q, 0);
-    });
-    return { dupIds: ids, dupSets: sets, dupExtraBottles: extra };
-  }, [stockData]);
+  // 점검 필요: 중복 등록 · 음수 재고. 팀원이 '확인 완료'한 항목은 숫자와 경고에서 빠져요.
+  const issues = useMemo(() => findIssues(stockData), [stockData]);
+  const openIssues = useMemo(() => issues.filter(i => !acks.has(i.signature)), [issues, acks]);
+  const { dupSets, dupExtraBottles, checkIds } = useMemo(() => {
+    const dups = openIssues.filter(i => i.kind === 'duplicate');
+    const all = new Set();
+    openIssues.forEach(i => i.rows.forEach(r => all.add(r.id)));
+    return { dupSets: dups.length, dupExtraBottles: dups.reduce((s2, i) => s2 + i.extraBottles, 0), checkIds: all };
+  }, [openIssues]);
+
+  const loadAcks = async () => {
+    const { data, error } = await supabase.from('wine_check_acks').select('*');
+    if (error) { setAcksAvailable(false); return; }
+    setAcksAvailable(true);
+    setAcks(new Map((data || []).map(a => [a.signature, a])));
+  };
+  useEffect(() => { loadAcks(); }, []);
+
+  const handleAck = async (issue) => {
+    const { data, error } = await supabase.from('wine_check_acks')
+      .insert([{ signature: issue.signature, kind: issue.kind, label: issue.label }])
+      .select().single();
+    if (error) {
+      if (String(error.code) === '23505') { await loadAcks(); return; } // 다른 팀원이 먼저 확인함
+      throw new Error('확인 완료를 저장하지 못했어요. 다시 시도해 주세요.');
+    }
+    setAcks(prev => new Map(prev).set(data.signature, data));
+    showToast('확인 완료로 표시했어요');
+  };
+  const handleUnack = async (signature) => {
+    const { error } = await supabase.from('wine_check_acks').delete().eq('signature', signature);
+    if (error) throw new Error('되돌리지 못했어요. 다시 시도해 주세요.');
+    setAcks(prev => { const next = new Map(prev); next.delete(signature); return next; });
+  };
+  const handleDeleteRow = async (row) => {
+    if (!isAdmin) throw new Error('항목 삭제는 관리자만 할 수 있어요.');
+    const { error } = await supabase.from('wines').delete().eq('id', row.id);
+    if (error) throw new Error('지우지 못했어요. 새로고침 후 다시 시도해 주세요.');
+    setStockData(prev => prev.filter(w => w.id !== row.id));
+    showToast(`${row.name} ${row.vintage} 0병 중복 항목을 지웠어요`);
+  };
 
   const filteredData = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -1121,15 +1159,15 @@ export default function App({ member }) {
         statusFilter === '전체' ? true :
         statusFilter === '재고있음' ? item.currentQty > 0 :
         statusFilter === '품절' ? item.currentQty === 0 :
-        (item.currentQty < 0 || dupIds.has(item.id));
+        checkIds.has(item.id);
       return matchSearch && matchRack && matchCountry && matchVintage && matchStatus;
     });
-  }, [stockData, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, dupIds]);
+  }, [stockData, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, checkIds]);
 
   const allGroups = useMemo(() => buildGroups(stockData), [stockData]);
   const groups = useMemo(() => sortGroups(buildGroups(filteredData), sortBy), [filteredData, sortBy]);
   const filteredBottles = useMemo(() => filteredData.reduce((s, r) => s + (r.currentQty || 0), 0), [filteredData]);
-  const errorRows = useMemo(() => stockData.filter(i => i.currentQty < 0), [stockData]);
+  const errorRows = useMemo(() => openIssues.filter(i => i.kind === 'negative').map(i => i.rows[0]), [openIssues]);
 
   const stats = useMemo(() => ({
     totalBottles: stockData.reduce((acc, cur) => acc + cur.currentQty, 0),
@@ -1137,8 +1175,8 @@ export default function App({ member }) {
     rowCount: stockData.length,
     outOfStockCount: stockData.filter(i => i.currentQty === 0).length,
     errorCount: errorRows.length,
-    checkCount: errorRows.length + dupSets,
-  }), [stockData, allGroups, errorRows, dupSets]);
+    checkCount: openIssues.length,
+  }), [stockData, allGroups, errorRows, openIssues]);
 
   const pickerGroups = useMemo(() => {
     const term = pickerTerm.trim().toLowerCase();
@@ -1237,7 +1275,7 @@ export default function App({ member }) {
     },
     { label: '와인', value: stats.wineCount, unit: '종', sub: '빈티지 묶음 기준' },
     { label: '품절', value: stats.outOfStockCount, unit: '건', tone: 'warn', filter: '품절' },
-    { label: '점검 필요', value: stats.checkCount, unit: '건', tone: stats.checkCount > 0 ? 'error' : 'none', filter: '오류' },
+    { label: '점검 필요', value: stats.checkCount, unit: '건', tone: stats.checkCount > 0 ? 'error' : 'none', filter: '오류', open: () => setShowCheckPanel(true) },
   ];
 
   return (
@@ -1269,7 +1307,7 @@ export default function App({ member }) {
             <History className="w-[17px] h-[17px]" /> 입출고 이력
             {historyLogs.length > 0 && <span className={`${badge} bg-amber-500 text-gold-dark font-bold`}>{historyLogs.length}</span>}
           </button>
-          <button type="button" className={navItem} onClick={() => toggleStatus('오류')}>
+          <button type="button" className={navItem} onClick={() => setShowCheckPanel(true)}>
             <AlertTriangle className="w-[17px] h-[17px]" /> 점검 필요
             {stats.checkCount > 0 && <span className={`${badge} bg-red-400 text-red-950 font-bold`}>{stats.checkCount}</span>}
           </button>
@@ -1380,7 +1418,7 @@ export default function App({ member }) {
                 <Tag
                   key={k.label}
                   type={clickable ? 'button' : undefined}
-                  onClick={clickable ? () => toggleStatus(k.filter) : undefined}
+                  onClick={clickable ? (k.open || (() => toggleStatus(k.filter))) : undefined}
                   aria-pressed={clickable ? active : undefined}
                   className={`text-left rounded-2xl border px-2.5 py-2 lg:px-4 lg:py-3 ${toneCls} ${clickable ? 'hover:border-slate-500 transition' : ''}`}
                 >
@@ -1402,8 +1440,8 @@ export default function App({ member }) {
                 <b className="text-amber-200">같은 와인·빈티지·위치가 두 번 등록된 항목이 {dupSets}건</b> 있어요.
                 총 보관 숫자가 실제보다 약 {dupExtraBottles.toLocaleString()}병 많게 보일 수 있어요.
               </div>
-              <button type="button" onClick={() => toggleStatus('오류')} className="shrink-0 text-amber-200 font-semibold hover:underline">
-                목록 ›
+              <button type="button" onClick={() => setShowCheckPanel(true)} className="shrink-0 text-amber-200 font-semibold hover:underline">
+                확인 ›
               </button>
             </div>
           )}
@@ -1420,7 +1458,7 @@ export default function App({ member }) {
               </div>
               <button
                 type="button"
-                onClick={() => { if (errorRows.length > 1) toggleStatus('오류'); openRow(errorRows[0]); }}
+                onClick={() => setShowCheckPanel(true)}
                 className="shrink-0 text-red-200 font-semibold hover:underline"
               >
                 확인 ›
@@ -1671,6 +1709,21 @@ export default function App({ member }) {
       )}
 
       {/* ───────── 초기화 확인 ───────── */}
+      {showCheckPanel && (
+        <CheckPanel
+          issues={issues}
+          acks={acks}
+          acksAvailable={acksAvailable}
+          isAdmin={isAdmin}
+          onAck={handleAck}
+          onUnack={handleUnack}
+          onDeleteRow={handleDeleteRow}
+          onOpenRow={(row) => { setShowCheckPanel(false); openRow(row); }}
+          onShowInList={() => { setShowCheckPanel(false); setStatusFilter('오류'); scrollToId('wine-list'); }}
+          onClose={() => setShowCheckPanel(false)}
+        />
+      )}
+
       {showResetConfirm && (
         <ResetConfirm onCancel={() => setShowResetConfirm(false)} onConfirm={handleResetToDefault} />
       )}
@@ -1793,8 +1846,8 @@ export default function App({ member }) {
         <SyncReview
           data={diffModalData}
           onCancel={() => setDiffModalData(null)}
-          onApply={({ deleteDup, deleteMissing, backup }) => {
-            if (backup) handleDownloadExcel();
+          onApply={async ({ deleteDup, deleteMissing, backup }) => {
+            if (backup) await handleDownloadExcel();
             const del = new Set([
               ...(deleteDup ? diffModalData.dupRows.map(r => r.id) : []),
               ...(deleteMissing ? diffModalData.missingRows.map(r => r.id) : []),
