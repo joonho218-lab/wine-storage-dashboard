@@ -11,7 +11,7 @@ const RULES = [
   ['디저트·주정강화', /\bPort\b|포트|Yquem|디켐|Sauternes|소테른|Tokaji|토카이|Ice ?wine|아이스 ?와인|Vin Santo|Madeira|마데이라|Sherry|셰리/i],
   ['스파클링', /Champagne|샴페인|\bBrut\b|브뤼|Cava|Prosecco|Franciacorta|Cr[ée]mant|Spumante|Sekt|Blanc de Blancs|Dom P[ée]rignon|돔페리뇽|Krug|크룩|Cristal|크리스탈|Bollinger|볼랭저|Selosse|셀로스|Perrier-Jou|페리에 주에|Henriot|Jacquesson|Laurent-Perrier|로랑페리에|Salon|Armand de Brignac|브리냑/i],
   ['로제', /Ros[ée]\b|로제/i],
-  ['화이트', /Blanc\b|블랑|Bianco|비앙코|Chardonnay|샤도네|샤르도네|Sauvignon Blanc|소비뇽 블랑|Riesling|리슬링|Aligot|알리고|Montrachet|몽라쉐|몽라셰|Meursault|메르소|Charlemagne|샤를마뉴|Chablis|샤블리|Roussanne|루싼|Viognier|Condrieu|Gew[üu]rz|Pinot Gri|Grigio|Albari|Gorgona|고르고나|Rully|륄리|Clous Aim|끌루 에메|Pouilly|Sancerre|Gaia & Rey|가이아|Marguerite|마르게릿/i],
+  ['화이트', /Blanc\b|블랑|Bianco|비앙코|Chardonnay|샤도네|샤르도네|Sauvignon Blanc|소비뇽 블랑|Riesling|리슬링|Aligot|알리고|Montrachet|몽라쉐|몽라셰|Meursault|메르소|Charlemagne|샤를마뉴|Chablis|샤블리|Roussanne|루싼|Viognier|Condrieu|Gew[üu]rz|Pinot Gri|Grigio|Albari|Gorgona|고르고나|Rully|륄리|Saint-Aubin|쌩또뱅|Clous Aim|끌루 에메|Pouilly|Sancerre|Gaia & Rey|가이아|Marguerite|마르게릿/i],
 ];
 
 // 이름만으로는 확실하지 않은 와인 (요약 시트에 메모로 보여줘요)
