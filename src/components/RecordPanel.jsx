@@ -111,7 +111,11 @@ export default function RecordPanel({
             </button>
           )}
           <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-bold text-slate-100 leading-snug tracking-tight">{group.name}</h3>
+            <h3 className="text-lg font-bold text-slate-100 leading-snug tracking-tight">
+              <button type="button" onClick={() => onEditEnglish(row)} title="와인명 수정" className="text-left hover:text-wine-light">
+                {group.name}
+              </button>
+            </h3>
             <button
               type="button"
               onClick={() => onEditEnglish(row)}
