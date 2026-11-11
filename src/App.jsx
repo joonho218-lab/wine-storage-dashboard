@@ -391,6 +391,7 @@ export default function App({ member }) {
 
   const [editingEnglishWine, setEditingEnglishWine] = useState(null);
   const [inputEnglishName, setInputEnglishName] = useState('');
+  const [inputKoreanName, setInputKoreanName] = useState('');
 
   const [editingNoteWine, setEditingNoteWine] = useState(null);
   const [inputNote, setInputNote] = useState('');
@@ -561,17 +562,24 @@ export default function App({ member }) {
       ? editingEnglishWine.groupIds
       : [targetId];
     const trimmed = inputEnglishName.trim();
+    const koName = inputKoreanName.trim() || editingEnglishWine.name;
+    // 한글명은 바뀐 경우에만 함께 저장 (그룹 안 빈티지들의 한글명을 하나로 맞춰요)
+    const changes = { english_name: trimmed };
+    if (koName !== editingEnglishWine.name) changes.name = koName;
 
-    const { error } = await supabase.from('wines').update({ english_name: trimmed }).in('id', targetIds);
+    const { error } = await supabase.from('wines').update(changes).in('id', targetIds);
     if (error) { alert(error.message); return; }
 
-    setStockData(prev => prev.map(w => targetIds.includes(w.id) ? { ...w, englishName: trimmed } : w));
+    setStockData(prev => prev.map(w => targetIds.includes(w.id)
+      ? { ...w, englishName: trimmed, ...(changes.name ? { name: koName } : {}) }
+      : w));
     if (zoomedWine && targetIds.includes(zoomedWine.id)) {
-      setZoomedWine(prev => ({ ...prev, englishName: trimmed }));
+      setZoomedWine(prev => ({ ...prev, englishName: trimmed, ...(changes.name ? { name: koName } : {}) }));
     }
 
     setEditingEnglishWine(null);
     setInputEnglishName('');
+    setInputKoreanName('');
 
   };
 
@@ -1234,6 +1242,7 @@ export default function App({ member }) {
     const group = allGroups.find(g => g.key === groupKeyOf(row));
     setEditingEnglishWine({ ...row, groupIds: group ? group.rows.map(r => r.id) : [row.id] });
     setInputEnglishName(row.englishName || '');
+    setInputKoreanName(row.name || '');
   };
 
   if (loading) {
@@ -1898,19 +1907,21 @@ export default function App({ member }) {
         </div>
       )}
 
-      {/* 영문명 수정 모달 */}
+      {/* 와인명(한글·영문) 수정 모달 */}
       {editingEnglishWine && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <h3 className="font-bold text-white text-base flex items-center gap-1.5"><Edit3 className="w-4 h-4 text-amber-400" /> 영문 와인명 수정</h3>
+                <h3 className="font-bold text-white text-base flex items-center gap-1.5"><Edit3 className="w-4 h-4 text-amber-400" /> 와인명 수정</h3>
                 <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[240px]">{editingEnglishWine.name}</p>
               </div>
               <button onClick={() => setEditingEnglishWine(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-300">정확한 영문 와인명 입력</label>
+              <label className="block text-xs font-semibold text-slate-300">한글 와인명</label>
+              <input type="text" placeholder="예: 오퍼스 원" value={inputKoreanName} onChange={(e) => setInputKoreanName(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500" />
+              <label className="block text-xs font-semibold text-slate-300 pt-1">영문 와인명</label>
               <input type="text" placeholder="예: Opus One" value={inputEnglishName} onChange={(e) => setInputEnglishName(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white font-serif focus:outline-none focus:border-rose-500" />
               {editingEnglishWine.groupIds && editingEnglishWine.groupIds.length > 1 && (
                 <p className="text-[11px] text-slate-500">같은 와인의 빈티지 {editingEnglishWine.groupIds.length}개에 함께 적용돼요.</p>
