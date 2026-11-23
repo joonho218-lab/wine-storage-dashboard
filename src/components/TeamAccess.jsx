@@ -82,7 +82,7 @@ export default function TeamAccess() {
     const needsPassword = !!member && (member.needs_password_change || changing);
     return <main className="min-h-screen bg-slate-950 text-slate-100 grid place-items-center p-5">
       <section className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-7 shadow-2xl">
-        <p className="text-rose-300 text-sm mb-2">서울석유 · 2층 와인창고</p>
+        <p className="text-rose-300 text-sm mb-2">서울석유 · 와인창고</p>
         <h1 className="text-2xl font-bold">{needsPassword ? '내 비밀번호 설정' : '팀 로그인'}</h1>
         <p className="text-sm text-slate-400 mt-3 leading-relaxed">{needsPassword ? `${member.display_name}님, 사용할 비밀번호를 설정해 주세요.` : '이름으로 로그인하면 재고 변경에 수정한 사람과 시간이 자동으로 기록됩니다.'}</p>
         {(!session || needsPassword) && <form onSubmit={needsPassword ? changePassword : signIn} className="mt-6 space-y-4">

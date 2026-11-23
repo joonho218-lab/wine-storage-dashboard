@@ -81,7 +81,7 @@ export default function TeamManager({ me, onClose }) {
   };
 
   const copyCredential = async () => {
-    const text = `[2층 와인창고] 아이디: ${credential.name} / 임시 비밀번호: ${credential.password}\nhttps://wine-storage-dashboard.vercel.app 에서 로그인한 뒤 새 비밀번호를 설정해 주세요.`;
+    const text = `[서울석유 와인창고] 아이디: ${credential.name} / 임시 비밀번호: ${credential.password}\nhttps://wine-storage-dashboard.vercel.app 에서 로그인한 뒤 새 비밀번호를 설정해 주세요.`;
     try { await navigator.clipboard.writeText(text); setCopied(true); }
     catch { setError('복사하지 못했어요. 아이디와 비밀번호를 길게 눌러 직접 복사해 주세요.'); }
   };

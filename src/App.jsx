@@ -14,12 +14,14 @@ import FilterBar from './components/FilterBar';
 import { GroupCards, GroupTable } from './components/WineList';
 import SyncReview from './components/SyncReview';
 import CheckPanel from './components/CheckPanel';
+import BulkAdd from './components/BulkAdd';
 import { findIssues } from './lib/checks';
 import { downloadStyledExcel } from './lib/exportExcel';
 import { MoreIcon, InOutIcon, ListIcon } from './components/icons';
 import {
   WALL_RACKS, CENTER_RACKS, rackMatches, rackLabel, vintageNumber,
   buildGroups, sortGroups, groupKeyOf,
+  FLOORS, FLOOR4_RACK, floorOf, floorLabel,
 } from './lib/wine';
 
 function useMediaQuery(query) {
@@ -37,8 +39,10 @@ function useMediaQuery(query) {
 const COMMON_RACKS = [
   ...Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`),
   '중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)',
-  '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', '직접입력'
+  '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', FLOOR4_RACK, '직접입력'
 ];
+// 4층 탭에서는 4층 셀러를 맨 앞에 보여줘요
+const racksFor = (floor) => floor === '4F' ? [FLOOR4_RACK, ...COMMON_RACKS.filter(r => r !== FLOOR4_RACK)] : COMMON_RACKS;
 
 const MASTER_WINE_DICTIONARY = {
   '필립 파칼레 샹볼 뮈지니 1등급 "레 상티에"': 'Philippe Pacalet Chambolle-Musigny 1er Cru Les Sentiers',
@@ -355,6 +359,11 @@ export default function App({ member }) {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [undoing, setUndoing] = useState(null);
   const [stockData, setStockData] = useState([]);
+  // 층 탭: 2층 와인창고 / 4층 식당 셀러 (마지막으로 본 탭을 기억)
+  const [floor, setFloor] = useState(() => {
+    try { return localStorage.getItem('wine.floor') === '4F' ? '4F' : '2F'; } catch { return '2F'; }
+  });
+  const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [historyLogs, setHistoryLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -411,6 +420,15 @@ export default function App({ member }) {
     qty: 1,
     note: '',
   });
+
+  // 와인 추가 창을 열 때 보관 위치 기본값을 지금 층에 맞춰요
+  useEffect(() => {
+    if (!showAddModal) return;
+    setNewWineForm(f => ({
+      ...f,
+      rack: floor === '4F' ? FLOOR4_RACK : (floorOf(f.rack) === '4F' ? '1번랙' : f.rack),
+    }));
+  }, [showAddModal, floor]);
 
   useEffect(() => {
     async function initData() {
@@ -665,6 +683,30 @@ export default function App({ member }) {
     setShowAddModal(false);
   };
 
+  // 여러 와인 한 번에 등록 (붙여넣기). 한 번에 넣어도 이력은 와인마다 내 이름으로 남아요.
+  const handleBulkAdd = async ({ rows, rack, note }) => {
+    const base = Date.now() * 1000;
+    const records = rows.map((r, i) => ({
+      id: base + i,
+      country: r.country,
+      name: r.name,
+      english_name: r.englishName || getWineEnglishName(r.name),
+      vintage: r.vintage,
+      rack,
+      in_qty: r.qty,
+      out_qty: 0,
+      current_qty: r.qty,
+      status: '정상',
+      note,
+      custom_image: null,
+    }));
+    const { error } = await supabase.from('wines').insert(records);
+    if (error) throw new Error('등록하지 못했어요: ' + error.message);
+    setShowBulkAdd(false);
+    setShowAddModal(false);
+    showToast(`${records.length}종 · ${records.reduce((s, r) => s + r.current_qty, 0)}병을 등록했어요`);
+  };
+
   const handleSaveImage = async (imgData) => {
     if (!editingImageWine) return;
     const targetId = editingImageWine.id;
@@ -721,6 +763,7 @@ export default function App({ member }) {
   // 초기화는 화면 안의 확인 창(showResetConfirm)에서 한 번 더 확인한 뒤 실행됩니다.
   const handleResetToDefault = async () => {
     if (!isAdmin) { alert('전체 초기화는 관리자만 할 수 있어요.'); return; }
+    if (floor !== '2F') { setShowResetConfirm(false); alert('초기화는 2층 와인창고 탭에서만 할 수 있어요.'); return; }
     setShowResetConfirm(false);
     setLoading(true);
     try {
@@ -758,11 +801,12 @@ export default function App({ member }) {
         };
       });
 
-      const { error: deleteError } = await supabase.from('wines').delete().neq('id', 0);
+      // 2층 창고만 덮어써요. 4층 셀러 와인은 그대로 둬요.
+      const { error: deleteError } = await supabase.from('wines').delete().neq('id', 0).not('rack', 'like', '4층%');
       if (deleteError) throw deleteError;
       const { error: insertError } = await supabase.from('wines').insert(defaultList);
       if (insertError) throw insertError;
-      setStockData(defaultList.map(r => mapFromDb(r)));
+      setStockData(prev => [...defaultList.map(r => mapFromDb(r)), ...prev.filter(r => floorOf(r.rack) === '4F')]);
       // Audit history is retained across inventory resets.
       alert('기본 데이터 복구가 완료되었습니다.');
     } catch (err) {
@@ -838,7 +882,9 @@ export default function App({ member }) {
             note: String(r[colNote] || '').trim(),
             customImage: r[colImage] ? String(r[colImage]).trim() : null,
             englishName: r[colEnglish] ? String(r[colEnglish]).trim() : null
-          }));
+          }))
+          // 4층 탭에서 올린 엑셀은 위치가 비어 있거나 2층 랙이어도 4층 셀러로 넣어요
+          .map((x) => (floor === '4F' && floorOf(x.rack) !== '4F' ? { ...x, rack: FLOOR4_RACK } : x));
 
         if (excelRows.length === 0) {
           alert('유효한 와인 행을 찾지 못했습니다. 엑셀 파일 형식을 확인해 주세요.');
@@ -849,7 +895,9 @@ export default function App({ member }) {
         // 화면 목록(stockData)이 비어 있거나 오래됐을 수 있으므로, 서버의 현재 데이터와 직접 맞춰 봅니다.
         // (목록이 비어 있을 때 올리면 모든 와인이 새로 추가돼 중복이 생기던 문제 방지)
         const { data: freshDb, error: freshErr } = await supabase.from('wines').select('*');
-        const baseRows = !freshErr && Array.isArray(freshDb) ? freshDb.map(r => mapFromDb(r)) : stockData;
+        // 지금 보고 있는 층의 와인끼리만 맞춰요 (다른 층 와인은 지우거나 바꾸지 않아요)
+        const baseRows = (!freshErr && Array.isArray(freshDb) ? freshDb.map(r => mapFromDb(r)) : stockData)
+          .filter(w => floorOf(w.rack) === floor);
 
         const matchedWebIds = new Set();
         const excelWithMatch = [];
@@ -1029,7 +1077,12 @@ export default function App({ member }) {
         if (delErr) throw delErr;
       }
 
-      setStockData([...safeMergedList.map(r => mapFromDb(r)), ...keepRows]);
+      const mergedFloor = floor;
+      setStockData(prev => [
+        ...safeMergedList.map(r => mapFromDb(r)),
+        ...keepRows,
+        ...prev.filter(r => floorOf(r.rack) !== mergedFloor),
+      ]);
       setDiffModalData(null);
       alert(successMessage);
     } catch (err) {
@@ -1042,9 +1095,9 @@ export default function App({ member }) {
 
   // 보기 좋은 엑셀(색·테두리·합계·랙별 요약). 서식 라이브러리를 못 불러오면 예전 기본 엑셀로 받아요.
   const handleDownloadExcel = async () => {
-    if (stockData.length === 0) return;
+    if (floorStock.length === 0) { alert(`${floorLabel(floor)}에 등록된 와인이 없어요.`); return; }
     try {
-      await downloadStyledExcel({ stock: stockData, logs: historyLogs, who: member?.display_name || '' });
+      await downloadStyledExcel({ stock: floorStock, logs: floorLogs, who: member?.display_name || '', place: floorLabel(floor) });
       return;
     } catch (err) {
       console.error('서식 엑셀 생성 실패, 기본 엑셀로 내려받기:', err);
@@ -1054,10 +1107,10 @@ export default function App({ member }) {
 
   const handlePlainExcel = () => {
     const stockSheetData = [
-      ['와 인 재 고 현 황'],
+      [`${floorLabel(floor)} 재고현황`],
       ['원산지', '와인명(한글)', '빈티지', '보관위치', '총 입고량', '총 출고량', '현재고', '상태', '비고', '이미지링크', '영문명']
     ];
-    stockData.forEach(item => {
+    floorStock.forEach(item => {
       stockSheetData.push([
         item.country, item.name, item.vintage, item.rack,
         item.inQty, item.outQty, item.currentQty, item.status, item.note,
@@ -1070,41 +1123,50 @@ export default function App({ member }) {
       ['변경 이력 (현재 불러온 기록)'],
       ['날짜/일시', '수정자', '구분', '원산지', '와인명', '빈티지', '보관위치', '수량', '변경 전 재고', '변경 후 재고', '사유']
     ];
-    historyLogs.forEach(l => {
+    floorLogs.forEach(l => {
       ledgerSheetData.push([l.time, l.actorName, l.changeType, l.country, l.name, l.vintage, l.rack, Math.abs(l.delta), l.prevQty, l.newQty, l.reason]);
     });
 
     const newWb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(newWb, XLSX.utils.aoa_to_sheet(stockSheetData), '와인재고현황');
     XLSX.utils.book_append_sheet(newWb, XLSX.utils.aoa_to_sheet(ledgerSheetData), '입출고변경이력');
-    XLSX.writeFile(newWb, `서울석유_와인창고_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(newWb, `서울석유_${floor === '4F' ? '4층식당셀러' : '2층와인창고'}_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
+
+  // 지금 보고 있는 층의 재고와 이력만 (목록 · 숫자 · 점검 · 엑셀 모두 이 기준)
+  const floorStock = useMemo(() => stockData.filter(item => floorOf(item.rack) === floor), [stockData, floor]);
+  const floorLogs = useMemo(() => historyLogs.filter(l => floorOf(l.rack) === floor), [historyLogs, floor]);
+  const floorCounts = useMemo(() => {
+    const c = { '2F': 0, '4F': 0 };
+    stockData.forEach(item => { c[floorOf(item.rack)] += item.currentQty || 0; });
+    return c;
+  }, [stockData]);
 
   const rackCountMap = useMemo(() => {
     const map = {};
-    stockData.forEach(item => { map[item.rack] = (map[item.rack] || 0) + item.currentQty; });
+    floorStock.forEach(item => { map[item.rack] = (map[item.rack] || 0) + item.currentQty; });
     return map;
-  }, [stockData]);
+  }, [floorStock]);
 
   const specialRacks = useMemo(() => {
-    const unique = Array.from(new Set(stockData.map(item => item.rack))).filter(Boolean);
+    const unique = Array.from(new Set(floorStock.map(item => item.rack))).filter(Boolean);
     return unique
       .filter(r => !WALL_RACKS.includes(r) && !CENTER_RACKS.includes(r))
       .sort((a, b) => (rackCountMap[b] || 0) - (rackCountMap[a] || 0));
-  }, [stockData, rackCountMap]);
+  }, [floorStock, rackCountMap]);
 
   const countryList = useMemo(() => {
-    const unique = Array.from(new Set(stockData.map(item => item.country))).filter(Boolean);
+    const unique = Array.from(new Set(floorStock.map(item => item.country))).filter(Boolean);
     return ['전체', ...unique];
-  }, [stockData]);
+  }, [floorStock]);
 
   const vintageOptions = useMemo(() => {
-    const nums = stockData.map(item => vintageNumber(item.vintage)).filter(v => v !== null);
+    const nums = floorStock.map(item => vintageNumber(item.vintage)).filter(v => v !== null);
     return Array.from(new Set(nums)).sort((a, b) => a - b);
-  }, [stockData]);
+  }, [floorStock]);
 
   // 점검 필요: 중복 등록 · 음수 재고. 팀원이 '확인 완료'한 항목은 숫자와 경고에서 빠져요.
-  const issues = useMemo(() => findIssues(stockData), [stockData]);
+  const issues = useMemo(() => findIssues(floorStock), [floorStock]);
   const openIssues = useMemo(() => issues.filter(i => !acks.has(i.signature)), [issues, acks]);
   const { dupSets, dupExtraBottles, checkIds } = useMemo(() => {
     const dups = openIssues.filter(i => i.kind === 'duplicate');
@@ -1149,7 +1211,7 @@ export default function App({ member }) {
     const term = searchTerm.trim().toLowerCase();
     const from = vintageFrom === '' ? null : Number(vintageFrom);
     const to = vintageTo === '' ? null : Number(vintageTo);
-    return stockData.filter(item => {
+    return floorStock.filter(item => {
       const matchSearch = !term ||
         item.name.toLowerCase().includes(term) ||
         (item.englishName && item.englishName.toLowerCase().includes(term)) ||
@@ -1170,21 +1232,34 @@ export default function App({ member }) {
         checkIds.has(item.id);
       return matchSearch && matchRack && matchCountry && matchVintage && matchStatus;
     });
-  }, [stockData, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, checkIds]);
+  }, [floorStock, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, checkIds]);
 
-  const allGroups = useMemo(() => buildGroups(stockData), [stockData]);
+  const allGroups = useMemo(() => buildGroups(floorStock), [floorStock]);
   const groups = useMemo(() => sortGroups(buildGroups(filteredData), sortBy), [filteredData, sortBy]);
   const filteredBottles = useMemo(() => filteredData.reduce((s, r) => s + (r.currentQty || 0), 0), [filteredData]);
   const errorRows = useMemo(() => openIssues.filter(i => i.kind === 'negative').map(i => i.rows[0]), [openIssues]);
 
   const stats = useMemo(() => ({
-    totalBottles: stockData.reduce((acc, cur) => acc + cur.currentQty, 0),
+    totalBottles: floorStock.reduce((acc, cur) => acc + cur.currentQty, 0),
     wineCount: allGroups.length,
-    rowCount: stockData.length,
-    outOfStockCount: stockData.filter(i => i.currentQty === 0).length,
+    rowCount: floorStock.length,
+    outOfStockCount: floorStock.filter(i => i.currentQty === 0).length,
     errorCount: errorRows.length,
     checkCount: openIssues.length,
-  }), [stockData, allGroups, errorRows, openIssues]);
+  }), [floorStock, allGroups, errorRows, openIssues]);
+
+  const switchFloor = (id) => {
+    if (id === floor) return;
+    setFloor(id);
+    try { localStorage.setItem('wine.floor', id); } catch { /* 저장 못 해도 화면은 그대로 */ }
+    setSelection(null);
+    setSelectedRack('전체');
+    setSelectedCountry('전체');
+    setVintageFrom('');
+    setVintageTo('');
+    setStatusFilter('전체');
+    window.scrollTo({ top: 0 });
+  };
 
   const pickerGroups = useMemo(() => {
     const term = pickerTerm.trim().toLowerCase();
@@ -1200,9 +1275,10 @@ export default function App({ member }) {
   useEffect(() => {
     if (!selection || selectedGroup) return;
     const row = stockData.find(r => r.id === selection.rowId);
-    if (row) setSelection({ key: groupKeyOf(row), rowId: row.id });
+    // 다른 층으로 옮긴 와인이면 선택을 닫아요 (지금 층 목록에 없으니까요)
+    if (row && floorOf(row.rack) === floor) setSelection({ key: groupKeyOf(row), rowId: row.id });
     else setSelection(null);
-  }, [selection, selectedGroup, stockData]);
+  }, [selection, selectedGroup, stockData, floor]);
 
   // PC: "/" 키로 검색창 이동
   const searchRef = useRef(null);
@@ -1299,22 +1375,40 @@ export default function App({ member }) {
             <Wine className="w-[18px] h-[18px]" />
           </div>
           <div className="min-w-0">
-            <div className="text-[15px] font-bold leading-tight">2층 와인창고</div>
+            <div className="text-[15px] font-bold leading-tight">{floorLabel(floor)}</div>
             <div className="text-[11.5px] text-slate-400">서울석유</div>
           </div>
         </div>
+
+        <div className="text-[11px] text-slate-500 px-3 pb-1.5">보관 장소</div>
+        <nav className="flex flex-col gap-0.5 mb-4" aria-label="보관 장소">
+          {FLOORS.map(f => (
+            <button
+              key={f.id}
+              type="button"
+              aria-current={floor === f.id ? 'page' : undefined}
+              onClick={() => switchFloor(f.id)}
+              className={`${navItem} ${floor === f.id ? 'bg-wine/20 text-white font-semibold ring-1 ring-wine/50' : ''}`}
+            >
+              <Wine className="w-[17px] h-[17px]" /> {f.label}
+              <span className={`${badge} ${floor === f.id ? 'bg-wine/40 text-rose-100' : 'bg-slate-800 text-slate-400'}`}>{floorCounts[f.id].toLocaleString()}</span>
+            </button>
+          ))}
+        </nav>
 
         <nav className="flex flex-col gap-0.5" aria-label="메뉴">
           <button type="button" className={`${navItem} bg-slate-850 text-slate-100 font-semibold`} onClick={() => { setStatusFilter('전체'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
             <ListIcon className="w-[17px] h-[17px]" /> 재고 목록
             <span className={`${badge} bg-slate-800 text-slate-400`}>{stats.wineCount}</span>
           </button>
-          <button type="button" className={navItem} onClick={() => scrollToId('rack-map')}>
-            <Grid3X3 className="w-[17px] h-[17px]" /> 랙 맵
-          </button>
+          {floor === '2F' && (
+            <button type="button" className={navItem} onClick={() => scrollToId('rack-map')}>
+              <Grid3X3 className="w-[17px] h-[17px]" /> 랙 맵
+            </button>
+          )}
           <button type="button" className={navItem} onClick={() => setShowLogModal(true)}>
             <History className="w-[17px] h-[17px]" /> 입출고 이력
-            {historyLogs.length > 0 && <span className={`${badge} bg-amber-500 text-gold-dark font-bold`}>{historyLogs.length}</span>}
+            {floorLogs.length > 0 && <span className={`${badge} bg-amber-500 text-gold-dark font-bold`}>{floorLogs.length}</span>}
           </button>
           <button type="button" className={navItem} onClick={() => setShowCheckPanel(true)}>
             <AlertTriangle className="w-[17px] h-[17px]" /> 점검 필요
@@ -1334,14 +1428,14 @@ export default function App({ member }) {
             <Upload className="w-[17px] h-[17px]" /> 새 엑셀 올리기
           </button>
         </nav>
-        <button
+        {floor === '2F' && <button
           type="button"
           onClick={() => { if (isAdmin) setShowResetConfirm(true); else alert('전체 초기화는 관리자만 할 수 있어요.'); }}
           className="mt-2 h-10 rounded-xl border border-dashed border-red-400/35 flex items-center gap-2.5 px-3 text-[13px] text-red-300 hover:bg-red-400/10 transition"
         >
           <RotateCcw className="w-4 h-4" /> 초기화
           <span className="ml-auto text-[10.5px] text-slate-500">확인 후 실행</span>
-        </button>
+        </button>}
 
         <div className="mt-auto pt-3 border-t border-slate-750 flex items-center gap-2 text-[11.5px] text-slate-400 px-2">
           <span className="w-[7px] h-[7px] rounded-full bg-emerald-400" /> 실시간 동기화 중
@@ -1351,12 +1445,12 @@ export default function App({ member }) {
       {/* ───────── 가운데 본문 ───────── */}
       <div className="min-w-0">
         {/* 모바일 헤더 */}
-        <header className="lg:hidden sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-slate-850 px-4 pb-2.5 pt-[max(10px,env(safe-area-inset-top))] flex items-center gap-2.5">
+        <header className="lg:hidden sticky top-0 z-30 bg-slate-950/95 backdrop-blur border-b border-slate-850 px-4 pb-2.5 pt-[max(10px,env(safe-area-inset-top))] flex flex-wrap items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-wine/15 border border-wine/35 grid place-items-center text-wine-light shrink-0">
             <Wine className="w-[18px] h-[18px]" />
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-[17px] font-bold leading-tight tracking-tight truncate">2층 와인창고</h1>
+            <h1 className="text-[17px] font-bold leading-tight tracking-tight truncate">{floorLabel(floor)}</h1>
             <p className="text-[11.5px] text-slate-400 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> 실시간 동기화 중
             </p>
@@ -1369,6 +1463,21 @@ export default function App({ member }) {
           >
             <MoreIcon />
           </button>
+          <div className="basis-full grid grid-cols-2 gap-1 p-1 mt-1 rounded-xl bg-slate-900 border border-slate-750" role="tablist" aria-label="보관 장소">
+            {FLOORS.map(f => (
+              <button
+                key={f.id}
+                type="button"
+                role="tab"
+                aria-selected={floor === f.id}
+                onClick={() => switchFloor(f.id)}
+                className={`h-9 rounded-lg text-[13.5px] font-semibold flex items-center justify-center gap-1.5 transition ${floor === f.id ? 'bg-wine text-white shadow' : 'text-slate-400'}`}
+              >
+                {f.short}
+                <span className={`text-[11px] font-normal tabular ${floor === f.id ? 'text-rose-100' : 'text-slate-500'}`}>{floorCounts[f.id].toLocaleString()}병</span>
+              </button>
+            ))}
+          </div>
         </header>
 
         <main className="px-4 lg:px-6 pt-3 lg:pt-5 pb-28 lg:pb-10 space-y-3 lg:space-y-4 max-w-[1120px] mx-auto">
@@ -1396,6 +1505,16 @@ export default function App({ member }) {
           </div>
 
           {/* 데이터가 비었을 때 안내 */}
+          {floor === '4F' && floorStock.length === 0 && (
+            <div className="bg-slate-900 border border-wine/40 rounded-2xl p-6 text-center space-y-3">
+              <Wine className="w-9 h-9 text-wine-light mx-auto" />
+              <h2 className="text-lg font-bold text-white">4층 식당 셀러에 등록된 와인이 없어요</h2>
+              <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">와인 추가에서 하나씩, 또는 목록을 붙여넣어 한 번에 등록할 수 있어요.</p>
+              <button type="button" onClick={() => setShowBulkAdd(true)} className="inline-flex items-center gap-2 px-5 py-2.5 bg-wine hover:bg-rose-600 text-white rounded-xl text-sm font-bold">
+                <Plus className="w-4 h-4" /> 여러 와인 한 번에 등록
+              </button>
+            </div>
+          )}
           {stockData.length === 0 && (
             <div className="bg-slate-900 border border-wine/40 rounded-2xl p-6 text-center space-y-3">
               <AlertCircle className="w-9 h-9 text-wine-light mx-auto" />
@@ -1475,12 +1594,14 @@ export default function App({ member }) {
             </div>
           )}
 
-          <RackMap
-            rackCountMap={rackCountMap}
-            specialRacks={specialRacks}
-            selectedRack={selectedRack}
-            onSelect={(r) => setSelectedRack(r)}
-          />
+          {floor === '2F' && (
+            <RackMap
+              rackCountMap={rackCountMap}
+              specialRacks={specialRacks}
+              selectedRack={selectedRack}
+              onSelect={(r) => setSelectedRack(r)}
+            />
+          )}
 
           {/* 모바일 검색 */}
           <label className="lg:hidden h-11 rounded-xl bg-slate-900 border border-slate-750 flex items-center gap-2.5 px-3.5 focus-within:border-wine">
@@ -1563,7 +1684,7 @@ export default function App({ member }) {
             </div>
             <div className="mt-6 text-xs text-slate-400 mb-2">최근 입출고</div>
             <ul className="space-y-1 overflow-y-auto">
-              {historyLogs.slice(0, 8).map((l) => {
+              {floorLogs.slice(0, 8).map((l) => {
                 const row = stockData.find(r => r.id === l.wineId);
                 return (
                   <li key={l.logId}>
@@ -1605,8 +1726,8 @@ export default function App({ member }) {
           <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-100">
             <ListIcon className="w-[22px] h-[22px]" /> 재고
           </button>
-          <button type="button" onClick={() => scrollToId('rack-map')} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
-            <Grid3X3 className="w-[22px] h-[22px]" /> 랙 맵
+          <button type="button" onClick={() => floor === '2F' ? scrollToId('rack-map') : scrollToId('wine-list')} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
+            <Grid3X3 className="w-[22px] h-[22px]" /> {floor === '2F' ? '랙 맵' : '목록'}
           </button>
           <button type="button" onClick={() => { setPickerTerm(''); setShowPicker(true); }} className="flex flex-col items-center -mt-6" aria-label="입출고 기록하기">
             <span className="w-[54px] h-[54px] rounded-[18px] bg-wine grid place-items-center text-white shadow-lg shadow-wine/40">
@@ -1617,8 +1738,8 @@ export default function App({ member }) {
           <button type="button" onClick={() => setShowLogModal(true)} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
             <span className="relative">
               <History className="w-[22px] h-[22px]" />
-              {historyLogs.length > 0 && (
-                <span className="absolute -top-1.5 -right-3 bg-amber-500 text-gold-dark text-[9px] font-bold rounded-full px-1 leading-[14px] tabular">{historyLogs.length}</span>
+              {floorLogs.length > 0 && (
+                <span className="absolute -top-1.5 -right-3 bg-amber-500 text-gold-dark text-[9px] font-bold rounded-full px-1 leading-[14px] tabular">{floorLogs.length}</span>
               )}
             </span>
             이력
@@ -1638,6 +1759,7 @@ export default function App({ member }) {
             <div className="space-y-1 pb-4">
               {[
                 { icon: Plus, label: '와인 추가', onClick: () => setShowAddModal(true) },
+                { icon: PlusCircle, label: '여러 와인 한 번에 등록', onClick: () => setShowBulkAdd(true) },
                 { icon: Download, label: '엑셀 다운로드', onClick: handleDownloadExcel },
                 { icon: Upload, label: '새 엑셀 올리기', onClick: () => isAdmin ? fileInputRef.current?.click() : alert('엑셀 일괄 변경은 관리자만 할 수 있어요.') },
                 { icon: History, label: '입출고 이력', onClick: () => setShowLogModal(true) },
@@ -1651,8 +1773,8 @@ export default function App({ member }) {
                   <Icon className="w-5 h-5 text-slate-400" /> {label}
                 </button>
               ))}
-              <div className="h-px bg-slate-750 my-2" />
-              <button
+              {floor === '2F' && <div className="h-px bg-slate-750 my-2" />}
+              {floor === '2F' && <button
                 type="button"
                 onClick={() => { setShowMoreMenu(false); if (isAdmin) setShowResetConfirm(true); else alert('전체 초기화는 관리자만 할 수 있어요.'); }}
                 className="w-full rounded-xl flex items-start gap-3 px-3 py-2.5 text-left hover:bg-red-400/10"
@@ -1660,9 +1782,9 @@ export default function App({ member }) {
                 <RotateCcw className="w-5 h-5 text-red-400 mt-0.5" />
                 <span>
                   <span className="block text-[15px] text-red-300">초기화</span>
-                  <span className="block text-xs text-slate-500">기본 엑셀로 전체 재고를 덮어써요. 한 번 더 확인해요.</span>
+                  <span className="block text-xs text-slate-500">기본 엑셀로 2층 창고 재고를 덮어써요. 한 번 더 확인해요.</span>
                 </span>
-              </button>
+              </button>}
             </div>
           </div>
         </div>
@@ -1892,7 +2014,7 @@ export default function App({ member }) {
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">이동할 새 랙 선택</label>
                 <select value={newSelectedRack} onChange={(e) => setNewSelectedRack(e.target.value)} className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500">
-                  {COMMON_RACKS.map(r => (<option key={r} value={r}>{r}</option>))}
+                  {racksFor(floor).map(r => (<option key={r} value={r}>{r}</option>))}
                 </select>
               </div>
               {newSelectedRack === '직접입력' && (
@@ -2078,6 +2200,9 @@ export default function App({ member }) {
               <button onClick={() => setShowAddModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleAddNewWine} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
+              <button type="button" onClick={() => setShowBulkAdd(true)} className="w-full rounded-xl border border-dashed border-slate-600 px-3 py-2.5 text-left text-[12.5px] text-slate-300 hover:border-rose-400/60 hover:text-white">
+                <b className="text-slate-100">여러 와인 한 번에 등록</b> · 엑셀이나 목록을 복사해 붙여넣기 ›
+              </button>
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">와인명 (한글) *</label>
                 <input
@@ -2116,7 +2241,7 @@ export default function App({ member }) {
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">보관 랙</label>
                   <select value={newWineForm.rack} onChange={(e) => setNewWineForm({ ...newWineForm, rack: e.target.value })} className="w-full px-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-rose-500">
-                    {COMMON_RACKS.map(r => (<option key={r} value={r}>{r}</option>))}
+                    {racksFor(floor).map(r => (<option key={r} value={r}>{r}</option>))}
                   </select>
                 </div>
                 <div>
@@ -2140,6 +2265,15 @@ export default function App({ member }) {
         </div>
       )}
 
+      {showBulkAdd && (
+        <BulkAdd
+          racks={racksFor(floor)}
+          defaultRack={floor === '4F' ? FLOOR4_RACK : '1번랙'}
+          onClose={() => setShowBulkAdd(false)}
+          onSubmit={handleBulkAdd}
+        />
+      )}
+
       {/* 변경 이력 모달 */}
       {showLogModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2147,7 +2281,7 @@ export default function App({ member }) {
             <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base sm:text-lg font-bold text-white">클라우드 변경 이력 ({historyLogs.length}건)</h3>
+                <h3 className="text-base sm:text-lg font-bold text-white">{floorLabel(floor)} 변경 이력 ({floorLogs.length}건)</h3>
               </div>
               <button onClick={() => setShowLogModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
@@ -2156,7 +2290,7 @@ export default function App({ member }) {
               <input aria-label="수정자 또는 와인 검색" placeholder="수정자 이름 / 와인명 검색" value={logFilter} onChange={e => setLogFilter(e.target.value)} className="w-full rounded-lg bg-slate-950 border border-slate-700 p-2 text-sm text-white" />
             </div>
             <div className="p-4 sm:p-5 flex-1 overflow-y-auto space-y-3">
-              {historyLogs.filter(log => !logFilter || log.actorName.includes(logFilter) || log.name?.includes(logFilter)).map(log => (
+              {floorLogs.filter(log => !logFilter || log.actorName.includes(logFilter) || log.name?.includes(logFilter)).map(log => (
                 <div key={log.logId} className="bg-slate-950 border border-slate-800/90 rounded-xl p-3 sm:p-4 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
