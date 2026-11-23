@@ -109,9 +109,9 @@ function sortStock(stock) {
   );
 }
 
-export function buildWorkbook(ExcelJS, { stock, logs = [], who = '', now = new Date() }) {
+export function buildWorkbook(ExcelJS, { stock, logs = [], who = '', now = new Date(), place = '2층 와인창고' }) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = '서울석유 2층 와인창고';
+  wb.creator = `서울석유 ${place}`;
   wb.created = now;
   wb.calcProperties.fullCalcOnLoad = true; // 요약 수식을 열 때 다시 계산
 
@@ -135,7 +135,7 @@ export function buildWorkbook(ExcelJS, { stock, logs = [], who = '', now = new D
   const headers = ['원산지', '와인명(한글)', '빈티지', '보관위치', '총 입고량', '총 출고량', '현재고', '상태', '비고', '이미지링크', '영문명', '종류', '구역 분류', '연대', '병 크기'];
   const widths = [9, 40, 8, 15, 9, 9, 9, 9, 24, 11, 46, 15, 19, 13, 9];
   ws.columns = widths.map((w) => ({ width: w }));
-  titleBlock(ws, '서울석유 2층 와인창고 재고현황', `기준 ${when}  ·  ${rows.length}개 항목  ·  총 ${totalBottles.toLocaleString()}병${who ? `  ·  내려받은 사람 ${who}` : ''}  ·  보관위치 순 정렬`, headers.length);
+  titleBlock(ws, `서울석유 ${place} 재고현황`, `기준 ${when}  ·  ${rows.length}개 항목  ·  총 ${totalBottles.toLocaleString()}병${who ? `  ·  내려받은 사람 ${who}` : ''}  ·  보관위치 순 정렬`, headers.length);
   headerRow(ws, 4, headers);
   ws.pageSetup.printTitlesRow = '4:4';
 
@@ -201,7 +201,7 @@ export function buildWorkbook(ExcelJS, { stock, logs = [], who = '', now = new D
   });
   if (rows.length) ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: last, column: headers.length } };
 
-  buildSummary(summary, { rows, logs, when, now, first, last });
+  buildSummary(summary, { rows, logs, when, now, first, last, place });
 
   // ───────── 2. 랙별 요약 ─────────
   const sum = wb.addWorksheet('랙별 요약', { views: [{ state: 'frozen', ySplit: 4, showGridLines: false }] });
@@ -278,7 +278,7 @@ export function buildWorkbook(ExcelJS, { stock, logs = [], who = '', now = new D
 }
 
 // ───────── 종합 요약 ─────────
-function buildSummary(ws, { rows, logs, when, now, first, last }) {
+function buildSummary(ws, { rows, logs, when, now, first, last, place }) {
   ws.columns = [{ width: 34 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 13 }];
   const n = rows.length;
   const qty = (r) => Number(r.currentQty) || 0;
@@ -290,7 +290,7 @@ function buildSummary(ws, { rows, logs, when, now, first, last }) {
   const fillOf = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
 
   ws.mergeCells(1, 1, 1, 6);
-  ws.getCell(1, 1).value = '서울석유 2층 와인창고 · 종합 재고 요약';
+  ws.getCell(1, 1).value = `서울석유 ${place} · 종합 재고 요약`;
   ws.getCell(1, 1).font = font(18, true, C.wine);
   ws.getRow(1).height = 34;
   ws.mergeCells(2, 1, 2, 6);
@@ -469,16 +469,16 @@ function buildSummary(ws, { rows, logs, when, now, first, last }) {
   }
 }
 
-export async function downloadStyledExcel({ stock, logs, who }) {
+export async function downloadStyledExcel({ stock, logs, who, place = '2층 와인창고' }) {
   const ExcelJS = await loadExcelJS();
   const now = new Date();
-  const wb = buildWorkbook(ExcelJS, { stock, logs, who, now });
+  const wb = buildWorkbook(ExcelJS, { stock, logs, who, now, place });
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `서울석유_와인창고_재고현황_${stamp(now).slice(0, 10)}.xlsx`;
+  a.download = `서울석유_${place.replace(/\s+/g, '')}_재고현황_${stamp(now).slice(0, 10)}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();

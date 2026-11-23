@@ -140,3 +140,17 @@ export function vivinoSearchUrl(item) {
   const vintage = item.vintage && item.vintage !== 'NV' ? item.vintage : '';
   return `https://www.google.com/search?q=${encodeURIComponent(`${name} ${vintage} vivino`.trim())}`;
 }
+
+// ── 층 구분 ──
+// 4층 식당 셀러의 와인은 보관위치가 '4층'으로 시작해요. (DB 구조는 그대로, 위치 값으로 나눠요)
+export const FLOOR4_RACK = '4층 셀러';
+export const FLOORS = [
+  { id: '2F', label: '2층 와인창고', short: '2층 창고' },
+  { id: '4F', label: '4층 식당 셀러', short: '4층 식당' },
+];
+export function floorOf(rack) {
+  return String(rack || '').trim().startsWith('4층') ? '4F' : '2F';
+}
+export function floorLabel(id) {
+  return (FLOORS.find((f) => f.id === id) || FLOORS[0]).label;
+}
