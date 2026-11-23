@@ -16,6 +16,7 @@ import SyncReview from './components/SyncReview';
 import CheckPanel from './components/CheckPanel';
 import BulkAdd from './components/BulkAdd';
 import { findIssues } from './lib/checks';
+import { prepareQuery, matchesQuery, searchKey } from './lib/search';
 import { downloadStyledExcel } from './lib/exportExcel';
 import { MoreIcon, InOutIcon, ListIcon } from './components/icons';
 import {
@@ -1207,17 +1208,23 @@ export default function App({ member }) {
     showToast(`${row.name} ${row.vintage} 0병 중복 항목을 지웠어요`);
   };
 
+  // 검색용 키를 와인마다 한 번만 만들어 둬요 (비슷한 표기 검색: 샤또/샤토, Château/Chateau …)
+  const searchIndex = useMemo(() => {
+    const m = new Map();
+    stockData.forEach(item => {
+      const fields = [item.name, item.englishName, String(item.vintage ?? ''), item.note, item.rack];
+      m.set(item.id, { fields, keys: fields.map(searchKey) });
+    });
+    return m;
+  }, [stockData]);
+
   const filteredData = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
+    const query = prepareQuery(searchTerm);
     const from = vintageFrom === '' ? null : Number(vintageFrom);
     const to = vintageTo === '' ? null : Number(vintageTo);
     return floorStock.filter(item => {
-      const matchSearch = !term ||
-        item.name.toLowerCase().includes(term) ||
-        (item.englishName && item.englishName.toLowerCase().includes(term)) ||
-        String(item.vintage).toLowerCase().includes(term) ||
-        (item.note && item.note.toLowerCase().includes(term)) ||
-        (item.rack && item.rack.toLowerCase().includes(term));
+      const idx = searchIndex.get(item.id);
+      const matchSearch = !query || (idx ? matchesQuery(query, idx.fields, idx.keys) : true);
       const matchRack = rackMatches(item.rack, selectedRack);
       const matchCountry = selectedCountry === '전체' || item.country === selectedCountry;
       let matchVintage = true;
@@ -1232,7 +1239,7 @@ export default function App({ member }) {
         checkIds.has(item.id);
       return matchSearch && matchRack && matchCountry && matchVintage && matchStatus;
     });
-  }, [floorStock, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, checkIds]);
+  }, [floorStock, searchIndex, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, checkIds]);
 
   const allGroups = useMemo(() => buildGroups(floorStock), [floorStock]);
   const groups = useMemo(() => sortGroups(buildGroups(filteredData), sortBy), [filteredData, sortBy]);
@@ -1262,9 +1269,9 @@ export default function App({ member }) {
   };
 
   const pickerGroups = useMemo(() => {
-    const term = pickerTerm.trim().toLowerCase();
-    const list = term
-      ? allGroups.filter(g => g.name.toLowerCase().includes(term) || g.englishName.toLowerCase().includes(term) || g.rows.some(r => r.name.toLowerCase().includes(term)))
+    const query = prepareQuery(pickerTerm);
+    const list = query
+      ? allGroups.filter(g => matchesQuery(query, [g.name, g.englishName, ...g.rows.map(r => r.name)]))
       : allGroups;
     return sortGroups(list, 'name').slice(0, 60);
   }, [allGroups, pickerTerm]);
