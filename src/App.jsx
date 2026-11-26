@@ -22,7 +22,7 @@ import { MoreIcon, InOutIcon, ListIcon } from './components/icons';
 import {
   WALL_RACKS, CENTER_RACKS, rackMatches, rackLabel, vintageNumber,
   buildGroups, sortGroups, groupKeyOf,
-  FLOORS, FLOOR4_RACK, floorOf, floorLabel,
+  FLOORS, FLOOR_IDS, FLOOR4_RACK, SAMDO_RACK, floorOf, floorLabel, floorRack,
 } from './lib/wine';
 
 function useMediaQuery(query) {
@@ -40,10 +40,11 @@ function useMediaQuery(query) {
 const COMMON_RACKS = [
   ...Array.from({ length: 27 }, (_, i) => `${i + 1}번랙`),
   '중앙랙(1번줄)', '중앙랙(2번줄)', '중앙랙(3번줄)', '중앙랙(4번줄)', '중앙랙(5번줄)', '중앙랙(6번줄)',
-  '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', FLOOR4_RACK, '직접입력'
+  '1번랙(천장)', '4,7번랙(천장)', '샴페인박스(1)', '샴페인박스(2)', '나라셀러박스', '삼도빌딩박스', FLOOR4_RACK, SAMDO_RACK, '직접입력'
 ];
 // 4층 탭에서는 4층 셀러를 맨 앞에 보여줘요
-const racksFor = (floor) => floor === '4F' ? [FLOOR4_RACK, ...COMMON_RACKS.filter(r => r !== FLOOR4_RACK)] : COMMON_RACKS;
+// 2층 밖 장소 탭에서는 그 장소 위치를 맨 앞에 보여줘요
+const racksFor = (floor) => floor === '2F' ? COMMON_RACKS : [floorRack(floor), ...COMMON_RACKS.filter(r => r !== floorRack(floor))];
 
 const MASTER_WINE_DICTIONARY = {
   '필립 파칼레 샹볼 뮈지니 1등급 "레 상티에"': 'Philippe Pacalet Chambolle-Musigny 1er Cru Les Sentiers',
@@ -362,7 +363,7 @@ export default function App({ member }) {
   const [stockData, setStockData] = useState([]);
   // 층 탭: 2층 와인창고 / 4층 식당 셀러 (마지막으로 본 탭을 기억)
   const [floor, setFloor] = useState(() => {
-    try { return localStorage.getItem('wine.floor') === '4F' ? '4F' : '2F'; } catch { return '2F'; }
+    try { const v = localStorage.getItem('wine.floor'); return FLOOR_IDS.includes(v) ? v : '2F'; } catch { return '2F'; }
   });
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [historyLogs, setHistoryLogs] = useState([]);
@@ -427,7 +428,7 @@ export default function App({ member }) {
     if (!showAddModal) return;
     setNewWineForm(f => ({
       ...f,
-      rack: floor === '4F' ? FLOOR4_RACK : (floorOf(f.rack) === '4F' ? '1번랙' : f.rack),
+      rack: floor !== '2F' ? floorRack(floor) : (floorOf(f.rack) !== '2F' ? '1번랙' : f.rack),
     }));
   }, [showAddModal, floor]);
 
@@ -803,11 +804,13 @@ export default function App({ member }) {
       });
 
       // 2층 창고만 덮어써요. 4층 셀러 와인은 그대로 둬요.
-      const { error: deleteError } = await supabase.from('wines').delete().neq('id', 0).not('rack', 'like', '4층%');
+      // 2층 창고만 덮어써요 (4층 셀러 · 삼도빌딩 와인은 그대로)
+      const { error: deleteError } = await supabase.from('wines').delete().neq('id', 0)
+        .not('rack', 'like', '4층%').neq('rack', SAMDO_RACK).not('rack', 'like', `${SAMDO_RACK} %`);
       if (deleteError) throw deleteError;
       const { error: insertError } = await supabase.from('wines').insert(defaultList);
       if (insertError) throw insertError;
-      setStockData(prev => [...defaultList.map(r => mapFromDb(r)), ...prev.filter(r => floorOf(r.rack) === '4F')]);
+      setStockData(prev => [...defaultList.map(r => mapFromDb(r)), ...prev.filter(r => floorOf(r.rack) !== '2F')]);
       // Audit history is retained across inventory resets.
       alert('기본 데이터 복구가 완료되었습니다.');
     } catch (err) {
@@ -885,7 +888,7 @@ export default function App({ member }) {
             englishName: r[colEnglish] ? String(r[colEnglish]).trim() : null
           }))
           // 4층 탭에서 올린 엑셀은 위치가 비어 있거나 2층 랙이어도 4층 셀러로 넣어요
-          .map((x) => (floor === '4F' && floorOf(x.rack) !== '4F' ? { ...x, rack: FLOOR4_RACK } : x));
+          .map((x) => (floor !== '2F' && floorOf(x.rack) !== floor ? { ...x, rack: floorRack(floor) } : x));
 
         if (excelRows.length === 0) {
           alert('유효한 와인 행을 찾지 못했습니다. 엑셀 파일 형식을 확인해 주세요.');
@@ -1131,14 +1134,14 @@ export default function App({ member }) {
     const newWb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(newWb, XLSX.utils.aoa_to_sheet(stockSheetData), '와인재고현황');
     XLSX.utils.book_append_sheet(newWb, XLSX.utils.aoa_to_sheet(ledgerSheetData), '입출고변경이력');
-    XLSX.writeFile(newWb, `서울석유_${floor === '4F' ? '4층식당셀러' : '2층와인창고'}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.writeFile(newWb, `서울석유_${floorLabel(floor).replace(/\s+/g, '')}_${new Date().toISOString().slice(0,10)}.xlsx`);
   };
 
   // 지금 보고 있는 층의 재고와 이력만 (목록 · 숫자 · 점검 · 엑셀 모두 이 기준)
   const floorStock = useMemo(() => stockData.filter(item => floorOf(item.rack) === floor), [stockData, floor]);
   const floorLogs = useMemo(() => historyLogs.filter(l => floorOf(l.rack) === floor), [historyLogs, floor]);
   const floorCounts = useMemo(() => {
-    const c = { '2F': 0, '4F': 0 };
+    const c = Object.fromEntries(FLOOR_IDS.map(id => [id, 0]));
     stockData.forEach(item => { c[floorOf(item.rack)] += item.currentQty || 0; });
     return c;
   }, [stockData]);
@@ -1470,7 +1473,7 @@ export default function App({ member }) {
           >
             <MoreIcon />
           </button>
-          <div className="basis-full grid grid-cols-2 gap-1 p-1 mt-1 rounded-xl bg-slate-900 border border-slate-750" role="tablist" aria-label="보관 장소">
+          <div className="basis-full grid grid-cols-3 gap-1 p-1 mt-1 rounded-xl bg-slate-900 border border-slate-750" role="tablist" aria-label="보관 장소">
             {FLOORS.map(f => (
               <button
                 key={f.id}
@@ -1512,10 +1515,10 @@ export default function App({ member }) {
           </div>
 
           {/* 데이터가 비었을 때 안내 */}
-          {floor === '4F' && floorStock.length === 0 && (
+          {floor !== '2F' && floorStock.length === 0 && (
             <div className="bg-slate-900 border border-wine/40 rounded-2xl p-6 text-center space-y-3">
               <Wine className="w-9 h-9 text-wine-light mx-auto" />
-              <h2 className="text-lg font-bold text-white">4층 식당 셀러에 등록된 와인이 없어요</h2>
+              <h2 className="text-lg font-bold text-white">{floorLabel(floor)}에 등록된 와인이 없어요</h2>
               <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">와인 추가에서 하나씩, 또는 목록을 붙여넣어 한 번에 등록할 수 있어요.</p>
               <button type="button" onClick={() => setShowBulkAdd(true)} className="inline-flex items-center gap-2 px-5 py-2.5 bg-wine hover:bg-rose-600 text-white rounded-xl text-sm font-bold">
                 <Plus className="w-4 h-4" /> 여러 와인 한 번에 등록
@@ -2275,7 +2278,7 @@ export default function App({ member }) {
       {showBulkAdd && (
         <BulkAdd
           racks={racksFor(floor)}
-          defaultRack={floor === '4F' ? FLOOR4_RACK : '1번랙'}
+          defaultRack={floorRack(floor)}
           onClose={() => setShowBulkAdd(false)}
           onSubmit={handleBulkAdd}
         />
