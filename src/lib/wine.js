@@ -141,16 +141,29 @@ export function vivinoSearchUrl(item) {
   return `https://www.google.com/search?q=${encodeURIComponent(`${name} ${vintage} vivino`.trim())}`;
 }
 
-// ── 층 구분 ──
-// 4층 식당 셀러의 와인은 보관위치가 '4층'으로 시작해요. (DB 구조는 그대로, 위치 값으로 나눠요)
+// ── 보관 장소 구분 ──
+// DB 구조는 그대로, 보관위치 값으로 장소를 나눠요.
+//  · 4층 식당 셀러: 위치가 '4층'으로 시작 (예: '4층 셀러')
+//  · 삼도빌딩: 위치가 '삼도빌딩' 이거나 '삼도빌딩 '으로 시작 (예: '삼도빌딩 A선반')
+//    ※ 기존 '삼도빌딩박스'는 2층 창고에 있는 박스라 2층으로 둬요.
+//  · 나머지는 모두 2층 와인창고
 export const FLOOR4_RACK = '4층 셀러';
+export const SAMDO_RACK = '삼도빌딩';
 export const FLOORS = [
-  { id: '2F', label: '2층 와인창고', short: '2층 창고' },
-  { id: '4F', label: '4층 식당 셀러', short: '4층 식당' },
+  { id: '2F', label: '2층 와인창고', short: '2층 창고', rack: '1번랙' },
+  { id: '4F', label: '4층 식당 셀러', short: '4층 식당', rack: FLOOR4_RACK },
+  { id: 'SD', label: '삼도빌딩', short: '삼도빌딩', rack: SAMDO_RACK },
 ];
+export const FLOOR_IDS = FLOORS.map((f) => f.id);
 export function floorOf(rack) {
-  return String(rack || '').trim().startsWith('4층') ? '4F' : '2F';
+  const r = String(rack || '').trim();
+  if (r.startsWith('4층')) return '4F';
+  if (r === SAMDO_RACK || r.startsWith(`${SAMDO_RACK} `)) return 'SD';
+  return '2F';
 }
 export function floorLabel(id) {
   return (FLOORS.find((f) => f.id === id) || FLOORS[0]).label;
+}
+export function floorRack(id) {
+  return (FLOORS.find((f) => f.id === id) || FLOORS[0]).rack;
 }
