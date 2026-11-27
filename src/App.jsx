@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import RackMap from './components/RackMap';
 import SamdoMap from './components/SamdoMap';
+import PhotoBulkAttach from './components/PhotoBulkAttach';
 import RecordPanel from './components/RecordPanel';
 import FilterBar from './components/FilterBar';
 import { GroupCards, GroupTable } from './components/WineList';
@@ -374,6 +375,7 @@ export default function App({ member }) {
   });
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [showEnglishBulk, setShowEnglishBulk] = useState(false);
+  const [showPhotoBulk, setShowPhotoBulk] = useState(false);
   const [bulkPrefill, setBulkPrefill] = useState(null); // 사진 목록 인식 결과로 채운 붙여넣기 내용
   const [scanState, setScanState] = useState({ busy: false, info: '', warn: '' });
   const scanInputRef = useRef(null);
@@ -803,6 +805,13 @@ export default function App({ member }) {
     showToast(`${done}종의 영문명을 저장했어요`);
   };
   const openEnglishBulk = () => isAdmin ? setShowEnglishBulk(true) : alert('영문명 한꺼번에 고치기는 관리자만 할 수 있어요.');
+
+  // 사진 한꺼번에 붙이기: 와인 하나씩 저장해서 이력도 와인마다 남아요
+  const handleBulkPhoto = async (row, image) => {
+    const { error } = await supabase.from('wines').update({ custom_image: image }).eq('id', row.id);
+    if (error) throw new Error(`${row.name} ${row.vintage}에서 멈췄어요: ${error.message}`);
+    setStockData(prev => prev.map(w => w.id === row.id ? { ...w, customImage: image } : w));
+  };
 
   const handleSaveImage = async (imgData) => {
     if (!editingImageWine) return;
@@ -1537,6 +1546,9 @@ export default function App({ member }) {
           <button type="button" className={navItem} onClick={openEnglishBulk}>
             <Edit3 className="w-[17px] h-[17px]" /> 영문명 한꺼번에 고치기
           </button>
+          <button type="button" className={navItem} onClick={() => setShowPhotoBulk(true)}>
+            <Camera className="w-[17px] h-[17px]" /> 사진 한꺼번에 붙이기
+          </button>
         </nav>
         {floor === '2F' && <button
           type="button"
@@ -1720,6 +1732,7 @@ export default function App({ member }) {
               selectedRack={selectedRack}
               onSelect={(r) => { setSelectedRack(r); if (r !== '전체') scrollToId('wine-list'); }}
               onOpenRow={openRow}
+              onBulkPhotos={() => setShowPhotoBulk(true)}
             />
           )}
 
@@ -1883,6 +1896,7 @@ export default function App({ member }) {
                 { icon: Download, label: '엑셀 다운로드', onClick: handleDownloadExcel },
                 { icon: Upload, label: '새 엑셀 올리기', onClick: () => isAdmin ? fileInputRef.current?.click() : alert('엑셀 일괄 변경은 관리자만 할 수 있어요.') },
                 { icon: Edit3, label: '영문명 한꺼번에 고치기', onClick: openEnglishBulk },
+                { icon: Camera, label: '사진 한꺼번에 붙이기', onClick: () => setShowPhotoBulk(true) },
                 { icon: History, label: '입출고 이력', onClick: () => setShowLogModal(true) },
               ].map(({ icon: Icon, label, onClick }) => (
                 <button
@@ -2417,6 +2431,16 @@ export default function App({ member }) {
           notice={bulkPrefill?.notice || ''}
           onClose={() => { setShowBulkAdd(false); setBulkPrefill(null); }}
           onSubmit={async (args) => { await handleBulkAdd(args); setBulkPrefill(null); }}
+        />
+      )}
+
+      {showPhotoBulk && (
+        <PhotoBulkAttach
+          stock={floorStock}
+          placeLabel={floorLabel(floor)}
+          compress={compressImageFile}
+          onSave={handleBulkPhoto}
+          onClose={(n) => { setShowPhotoBulk(false); if (n) showToast(`${n}종에 사진을 붙였어요`); }}
         />
       )}
 
