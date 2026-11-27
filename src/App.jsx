@@ -1116,7 +1116,9 @@ export default function App({ member }) {
       const usedIds = new Set();
       const safeMergedList = excelWithMatchList.map(({ excelItem, match }) => {
         let rowId;
-        if (match && match.id && Number(match.id) < 1000000 && !usedIds.has(Number(match.id))) {
+        // 기존 항목은 원래 번호를 그대로 써요 (한 번에 등록·사진 등록으로 생긴 큰 번호도 포함).
+        // 예전에는 100만 이상 번호를 새 번호로 바꿔서, 엑셀을 올리면 같은 와인이 두 줄로 생겼어요.
+        if (match && match.id && Number.isSafeInteger(Number(match.id)) && !usedIds.has(Number(match.id))) {
           rowId = Number(match.id);
         } else {
           maxId += 1;
