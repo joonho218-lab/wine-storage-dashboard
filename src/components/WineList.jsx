@@ -1,5 +1,25 @@
 import { rackLabel, COUNTRY_FLAG } from '../lib/wine';
 import { SortIcon } from './icons';
+import { photoNumbers } from '../lib/samdoMap';
+
+// 사진 자리: 있으면 사진, 없으면 점선 칸 (현장 사진 번호만 있으면 노랑)
+function PhotoThumb({ group, small }) {
+  const size = small ? 'w-7 h-9' : 'w-9 h-12';
+  if (group.image) {
+    return <img src={group.image} alt="" className={`${size} object-contain rounded-md bg-slate-950 border border-slate-750 shrink-0`} loading="lazy" />;
+  }
+  const taken = group.rows.some((r) => photoNumbers(r.note).length > 0);
+  return (
+    <span
+      title={taken ? '현장 사진은 있는데 아직 안 붙였어요' : '사진 없음'}
+      className={`${size} shrink-0 rounded-md border border-dashed grid place-items-center text-center leading-[1.1] ${small ? 'text-[8px]' : 'text-[9px]'} ${
+        taken ? 'border-amber-300/60 text-amber-200/90' : 'border-slate-700 text-slate-600'
+      }`}
+    >
+      {taken ? <>현장<br />사진</> : <>사진<br />없음</>}
+    </span>
+  );
+}
 
 function Flag({ country }) {
   const code = COUNTRY_FLAG[country];
@@ -60,9 +80,7 @@ export function GroupCards({ groups, onOpen, selectedKey, selectedRowId }) {
           }`}
         >
           <div className="flex items-start gap-2">
-            {g.image && (
-              <img src={g.image} alt="" className="w-9 h-12 object-contain rounded-md bg-slate-950 border border-slate-750 shrink-0" loading="lazy" />
-            )}
+            <PhotoThumb group={g} />
             <div className="min-w-0 flex-1">
               <div className="text-[14.5px] font-semibold text-slate-100 leading-snug tracking-tight">{g.name}</div>
               {g.englishName && <div className="text-[12.5px] italic font-serif text-slate-400 truncate">{g.englishName}</div>}
@@ -141,9 +159,7 @@ export function GroupTable({ groups, onOpen, selectedKey, selectedRowId, sortBy,
                 >
                   <td className="px-3 py-2 align-middle max-w-[320px]">
                     <div className="flex items-center gap-2.5">
-                      {g.image && (
-                        <img src={g.image} alt="" className="w-7 h-9 object-contain rounded bg-slate-950 border border-slate-750 shrink-0" loading="lazy" />
-                      )}
+                      <PhotoThumb group={g} small />
                       <div className="min-w-0">
                         <div className="font-semibold text-slate-100 truncate">{g.name}</div>
                         <div className="text-[12px] italic font-serif text-slate-400 truncate">{g.englishName || '—'}</div>

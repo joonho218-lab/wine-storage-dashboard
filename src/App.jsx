@@ -383,6 +383,7 @@ export default function App({ member }) {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRack, setSelectedRack] = useState('전체');
+  const [photoFilter, setPhotoFilter] = useState('전체'); // 전체 · 있음 · 없음 (같은 와인 묶음 기준)
   const [selectedCountry, setSelectedCountry] = useState('전체');
   const [vintageFrom, setVintageFrom] = useState('');
   const [vintageTo, setVintageTo] = useState('');
@@ -1327,6 +1328,13 @@ export default function App({ member }) {
     return m;
   }, [stockData]);
 
+  // 사진이 있는 와인 묶음(영문명 기준). 빈티지 중 하나라도 사진이 있으면 '있음'
+  const photoGroupKeys = useMemo(() => {
+    const set = new Set();
+    floorStock.forEach(item => { if (item.customImage) set.add(groupKeyOf(item)); });
+    return set;
+  }, [floorStock]);
+
   const filteredData = useMemo(() => {
     const query = prepareQuery(searchTerm);
     const from = vintageFrom === '' ? null : Number(vintageFrom);
@@ -1346,12 +1354,27 @@ export default function App({ member }) {
         statusFilter === '재고있음' ? item.currentQty > 0 :
         statusFilter === '품절' ? item.currentQty === 0 :
         checkIds.has(item.id);
-      return matchSearch && matchRack && matchCountry && matchVintage && matchStatus;
+      const hasPhoto = photoGroupKeys.has(groupKeyOf(item));
+      const matchPhoto = photoFilter === '전체' || (photoFilter === '있음' ? hasPhoto : !hasPhoto);
+      return matchSearch && matchRack && matchCountry && matchVintage && matchStatus && matchPhoto;
     });
-  }, [floorStock, searchIndex, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, checkIds]);
+  }, [floorStock, searchIndex, searchTerm, selectedRack, selectedCountry, vintageFrom, vintageTo, statusFilter, checkIds, photoFilter, photoGroupKeys]);
 
   const allGroups = useMemo(() => buildGroups(floorStock), [floorStock]);
   const groups = useMemo(() => sortGroups(buildGroups(filteredData), sortBy), [filteredData, sortBy]);
+  const photoCounts = useMemo(() => {
+    const withPhoto = allGroups.filter(g => g.image).length;
+    return { 있음: withPhoto, 없음: allGroups.length - withPhoto };
+  }, [allGroups]);
+  // 랙별 '사진 없는 와인' 수 (2층 랙 맵의 사진 보기)
+  const rackNoPhotoMap = useMemo(() => {
+    const map = {};
+    floorStock.forEach(item => {
+      if (photoGroupKeys.has(groupKeyOf(item))) return;
+      (map[item.rack] = map[item.rack] || new Set()).add(groupKeyOf(item));
+    });
+    return Object.fromEntries(Object.entries(map).map(([r, s]) => [r, s.size]));
+  }, [floorStock, photoGroupKeys]);
   const filteredBottles = useMemo(() => filteredData.reduce((s, r) => s + (r.currentQty || 0), 0), [filteredData]);
   const errorRows = useMemo(() => openIssues.filter(i => i.kind === 'negative').map(i => i.rows[0]), [openIssues]);
 
@@ -1374,6 +1397,7 @@ export default function App({ member }) {
     setVintageFrom('');
     setVintageTo('');
     setStatusFilter('전체');
+    setPhotoFilter('전체');
     window.scrollTo({ top: 0 });
   };
 
@@ -1413,7 +1437,7 @@ export default function App({ member }) {
   const closeWine = () => setSelection(null);
   const scrollToId = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  const anyFilter = searchTerm.trim() !== '' || selectedRack !== '전체' || selectedCountry !== '전체' || vintageFrom !== '' || vintageTo !== '' || statusFilter !== '전체';
+  const anyFilter = searchTerm.trim() !== '' || selectedRack !== '전체' || selectedCountry !== '전체' || vintageFrom !== '' || vintageTo !== '' || statusFilter !== '전체' || photoFilter !== '전체';
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedRack('전체');
@@ -1421,6 +1445,7 @@ export default function App({ member }) {
     setVintageFrom('');
     setVintageTo('');
     setStatusFilter('전체');
+    setPhotoFilter('전체');
   };
   const toggleStatus = (value) => {
     setStatusFilter(prev => (prev === value ? '전체' : value));
@@ -1719,6 +1744,8 @@ export default function App({ member }) {
           {floor === '2F' && (
             <RackMap
               rackCountMap={rackCountMap}
+              rackNoPhotoMap={rackNoPhotoMap}
+              photoCounts={photoCounts}
               specialRacks={specialRacks}
               selectedRack={selectedRack}
               onSelect={(r) => setSelectedRack(r)}
@@ -1760,6 +1787,9 @@ export default function App({ member }) {
               onVintageTo={setVintageTo}
               statusFilter={statusFilter}
               onStatus={setStatusFilter}
+              photoFilter={photoFilter}
+              onPhoto={setPhotoFilter}
+              photoCounts={photoCounts}
               sortBy={sortBy}
               onSort={setSortBy}
               selectedRack={selectedRack}
