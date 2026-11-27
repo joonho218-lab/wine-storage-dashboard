@@ -9,6 +9,7 @@ import {
   Edit3, MapPin, AlertCircle, AlertTriangle
 } from 'lucide-react';
 import RackMap from './components/RackMap';
+import SamdoMap from './components/SamdoMap';
 import RecordPanel from './components/RecordPanel';
 import FilterBar from './components/FilterBar';
 import { GroupCards, GroupTable } from './components/WineList';
@@ -46,7 +47,11 @@ const COMMON_RACKS = [
 ];
 // 4층 탭에서는 4층 셀러를 맨 앞에 보여줘요
 // 2층 밖 장소 탭에서는 그 장소 위치를 맨 앞에 보여줘요
-const racksFor = (floor) => floor === '2F' ? COMMON_RACKS : [floorRack(floor), ...COMMON_RACKS.filter(r => r !== floorRack(floor))];
+// 삼도빌딩은 구역(USA1·USA2·중앙셀러)도 고를 수 있게
+const SAMDO_RACKS = [SAMDO_RACK, `${SAMDO_RACK} USA1`, `${SAMDO_RACK} USA2`, `${SAMDO_RACK} 중앙셀러`];
+const racksFor = (floor) => floor === '2F' ? COMMON_RACKS
+  : floor === 'SD' ? [...SAMDO_RACKS, ...COMMON_RACKS.filter(r => !SAMDO_RACKS.includes(r))]
+  : [floorRack(floor), ...COMMON_RACKS.filter(r => r !== floorRack(floor))];
 
 const MASTER_WINE_DICTIONARY = {
   '필립 파칼레 샹볼 뮈지니 1등급 "레 상티에"': 'Philippe Pacalet Chambolle-Musigny 1er Cru Les Sentiers',
@@ -1503,7 +1508,7 @@ export default function App({ member }) {
             <ListIcon className="w-[17px] h-[17px]" /> 재고 목록
             <span className={`${badge} bg-slate-800 text-slate-400`}>{stats.wineCount}</span>
           </button>
-          {floor === '2F' && (
+          {(floor === '2F' || floor === 'SD') && (
             <button type="button" className={navItem} onClick={() => scrollToId('rack-map')}>
               <Grid3X3 className="w-[17px] h-[17px]" /> 랙 맵
             </button>
@@ -1708,6 +1713,16 @@ export default function App({ member }) {
             />
           )}
 
+          {/* 삼도빌딩 랙 맵: 구역·층·박스와 사진 유무 */}
+          {floor === 'SD' && floorStock.length > 0 && (
+            <SamdoMap
+              stock={floorStock}
+              selectedRack={selectedRack}
+              onSelect={(r) => { setSelectedRack(r); if (r !== '전체') scrollToId('wine-list'); }}
+              onOpenRow={openRow}
+            />
+          )}
+
           {/* 모바일 검색 */}
           <label className="lg:hidden h-11 rounded-xl bg-slate-900 border border-slate-750 flex items-center gap-2.5 px-3.5 focus-within:border-wine">
             <Search className="w-4 h-4 text-slate-500" />
@@ -1831,8 +1846,8 @@ export default function App({ member }) {
           <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-100">
             <ListIcon className="w-[22px] h-[22px]" /> 재고
           </button>
-          <button type="button" onClick={() => floor === '2F' ? scrollToId('rack-map') : scrollToId('wine-list')} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
-            <Grid3X3 className="w-[22px] h-[22px]" /> {floor === '2F' ? '랙 맵' : '목록'}
+          <button type="button" onClick={() => (floor === '2F' || floor === 'SD') ? scrollToId('rack-map') : scrollToId('wine-list')} className="flex flex-col items-center gap-1 text-[10.5px] text-slate-500">
+            <Grid3X3 className="w-[22px] h-[22px]" /> {(floor === '2F' || floor === 'SD') ? '랙 맵' : '목록'}
           </button>
           <button type="button" onClick={() => { setPickerTerm(''); setShowPicker(true); }} className="flex flex-col items-center -mt-6" aria-label="입출고 기록하기">
             <span className="w-[54px] h-[54px] rounded-[18px] bg-wine grid place-items-center text-white shadow-lg shadow-wine/40">
