@@ -15,6 +15,7 @@ import { GroupCards, GroupTable } from './components/WineList';
 import SyncReview from './components/SyncReview';
 import CheckPanel from './components/CheckPanel';
 import BulkAdd from './components/BulkAdd';
+import EnglishBulkEdit from './components/EnglishBulkEdit';
 import { scanWinePhotos, matchExisting, MAX_SCAN_PHOTOS } from './lib/labelScan';
 import { findIssues } from './lib/checks';
 import { prepareQuery, matchesQuery, searchKey } from './lib/search';
@@ -367,6 +368,7 @@ export default function App({ member }) {
     try { const v = localStorage.getItem('wine.floor'); return FLOOR_IDS.includes(v) ? v : '2F'; } catch { return '2F'; }
   });
   const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [showEnglishBulk, setShowEnglishBulk] = useState(false);
   const [bulkPrefill, setBulkPrefill] = useState(null); // 사진 목록 인식 결과로 채운 붙여넣기 내용
   const [scanState, setScanState] = useState({ busy: false, info: '', warn: '' });
   const scanInputRef = useRef(null);
@@ -782,6 +784,20 @@ export default function App({ member }) {
     setShowAddModal(false);
     showToast(`${records.length}종 · ${records.reduce((s, r) => s + r.current_qty, 0)}병을 등록했어요`);
   };
+
+  // 영문명 한꺼번에 고치기 (관리자). 와인명마다 한 번씩 저장해서 이력도 와인마다 남아요.
+  const handleEnglishBulk = async (changes) => {
+    let done = 0;
+    for (const c of changes) {
+      const { error } = await supabase.from('wines').update({ english_name: c.english }).in('id', c.ids);
+      if (error) throw new Error(`${done}종까지 저장했어요. '${c.name}'에서 멈췄어요: ${error.message}`);
+      setStockData(prev => prev.map(w => c.ids.includes(w.id) ? { ...w, englishName: c.english } : w));
+      done += 1;
+    }
+    setShowEnglishBulk(false);
+    showToast(`${done}종의 영문명을 저장했어요`);
+  };
+  const openEnglishBulk = () => isAdmin ? setShowEnglishBulk(true) : alert('영문명 한꺼번에 고치기는 관리자만 할 수 있어요.');
 
   const handleSaveImage = async (imgData) => {
     if (!editingImageWine) return;
@@ -1511,6 +1527,9 @@ export default function App({ member }) {
           <button type="button" className={navItem} onClick={() => isAdmin ? fileInputRef.current?.click() : alert('엑셀 일괄 변경은 관리자만 할 수 있어요.')}>
             <Upload className="w-[17px] h-[17px]" /> 새 엑셀 올리기
           </button>
+          <button type="button" className={navItem} onClick={openEnglishBulk}>
+            <Edit3 className="w-[17px] h-[17px]" /> 영문명 한꺼번에 고치기
+          </button>
         </nav>
         {floor === '2F' && <button
           type="button"
@@ -1846,6 +1865,7 @@ export default function App({ member }) {
                 { icon: PlusCircle, label: '여러 와인 한 번에 등록', onClick: () => setShowBulkAdd(true) },
                 { icon: Download, label: '엑셀 다운로드', onClick: handleDownloadExcel },
                 { icon: Upload, label: '새 엑셀 올리기', onClick: () => isAdmin ? fileInputRef.current?.click() : alert('엑셀 일괄 변경은 관리자만 할 수 있어요.') },
+                { icon: Edit3, label: '영문명 한꺼번에 고치기', onClick: openEnglishBulk },
                 { icon: History, label: '입출고 이력', onClick: () => setShowLogModal(true) },
               ].map(({ icon: Icon, label, onClick }) => (
                 <button
@@ -2380,6 +2400,15 @@ export default function App({ member }) {
           notice={bulkPrefill?.notice || ''}
           onClose={() => { setShowBulkAdd(false); setBulkPrefill(null); }}
           onSubmit={async (args) => { await handleBulkAdd(args); setBulkPrefill(null); }}
+        />
+      )}
+
+      {showEnglishBulk && (
+        <EnglishBulkEdit
+          stock={floorStock}
+          placeLabel={floorLabel(floor)}
+          onClose={() => setShowEnglishBulk(false)}
+          onSubmit={handleEnglishBulk}
         />
       )}
 
