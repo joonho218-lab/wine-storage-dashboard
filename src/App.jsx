@@ -15,7 +15,7 @@ import { GroupCards, GroupTable } from './components/WineList';
 import SyncReview from './components/SyncReview';
 import CheckPanel from './components/CheckPanel';
 import BulkAdd from './components/BulkAdd';
-import { scanWinePhoto, matchExisting } from './lib/labelScan';
+import { scanWinePhotos, matchExisting, MAX_SCAN_PHOTOS } from './lib/labelScan';
 import { findIssues } from './lib/checks';
 import { prepareQuery, matchesQuery, searchKey } from './lib/search';
 import { downloadStyledExcel } from './lib/exportExcel';
@@ -691,46 +691,67 @@ export default function App({ member }) {
     setShowAddModal(false);
   };
 
-  // 📷 사진으로 채우기: 라벨 사진이면 칸을 채우고, 목록 사진이면 '한 번에 등록'으로 넘겨요
+  // 📷 사진으로 채우기: 여러 장 가능 (앞면·뒷면은 한 병으로 묶여요).
+  // 와인 1개면 칸을 채우고, 여러 개거나 목록 사진이면 '한 번에 등록'으로 넘겨요.
   const handleScanPhoto = async (e) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!file) return;
+    if (!files.length) return;
+    const tooMany = files.length > MAX_SCAN_PHOTOS;
+    const picked = files.slice(0, MAX_SCAN_PHOTOS);
     setScanState({ busy: true, info: '', warn: '' });
     try {
-      const result = await scanWinePhoto(file);
+      const result = await scanWinePhotos(picked);
       const wines = result.wines || [];
       if (!wines.length) { setScanState({ busy: false, info: '', warn: '사진에서 와인을 찾지 못했어요. 라벨이 잘 보이게 다시 찍어 주세요.' }); return; }
+      // 대표 사진(앞면)을 와인 사진으로 저장할 수 있게 줄여 둬요
+      const thumbs = {};
+      for (const w of wines) {
+        const n = w.front_photo || w.photos?.[0] || (picked.length === 1 && result.kind !== 'list' ? 1 : 0);
+        if (n && !thumbs[n]) { try { thumbs[n] = await compressImageFile(picked[n - 1]); } catch { /* 사진 없이도 등록돼요 */ } }
+      }
+      const thumbOf = (w) => thumbs[w.front_photo || w.photos?.[0] || (picked.length === 1 && result.kind !== 'list' ? 1 : 0)] || null;
+      const extra = tooMany ? ` 사진은 한 번에 ${MAX_SCAN_PHOTOS}장까지라 앞의 ${MAX_SCAN_PHOTOS}장만 읽었어요.` : '';
+
       if (wines.length > 1 || result.kind === 'list') {
+        const images = {};
         const lines = wines.map(w => {
           const same = matchExisting(w, stockData);
-          return [same?.name || w.name_ko || w.name_en, w.vintage || 'NV', w.quantity || 1, same?.country || w.country, same?.englishName || w.name_en].join('\t');
+          const name = same?.name || w.name_ko || w.name_en;
+          const vintage = w.vintage || 'NV';
+          const img = thumbOf(w);
+          if (img) images[`${name}__${vintage}`] = img;
+          return [name, vintage, w.quantity || 1, same?.country || w.country, same?.englishName || w.name_en].join('\t');
         });
         const unsure = wines.filter(w => w.confidence !== 'high' || w.unsure).map(w => `${w.name_ko || w.name_en}${w.unsure ? ` (${w.unsure})` : ''}`);
-        setBulkPrefill({ text: lines.join('\n'), notice: `사진에서 ${wines.length}줄을 읽었어요. 등록 전에 이름·빈티지·수량을 확인해 주세요.${unsure.length ? ` 확인 필요: ${unsure.slice(0, 6).join(', ')}${unsure.length > 6 ? ' …' : ''}` : ''}` });
+        setBulkPrefill({
+          text: lines.join('\n'),
+          images,
+          notice: `사진 ${picked.length}장에서 와인 ${wines.length}개를 읽었어요. 등록 전에 이름·빈티지·수량을 확인해 주세요.${extra}${unsure.length ? ` 확인 필요: ${unsure.slice(0, 6).join(', ')}${unsure.length > 6 ? ' …' : ''}` : ''}`,
+        });
         setScanState({ busy: false, info: '', warn: '' });
         setShowBulkAdd(true);
         return;
       }
       const w = wines[0];
       const same = matchExisting(w, stockData);
-      let image = null;
-      try { image = await compressImageFile(file); } catch { /* 사진 저장은 건너뛰어도 등록은 돼요 */ }
       setNewWineForm(f => ({
         ...f,
         name: same?.name || w.name_ko || w.name_en,
         englishName: same?.englishName || w.name_en,
         vintage: w.vintage || f.vintage || 'NV',
         country: same?.country || w.country || f.country,
+        qty: w.quantity > 1 ? w.quantity : f.qty,
         note: w.bottle && !f.note ? w.bottle : f.note,
-        image,
+        image: thumbOf(w),
       }));
       const notes = [];
+      if (picked.length > 1) notes.push(`사진 ${picked.length}장을 한 병으로 읽었어요.`);
       if (same) notes.push('이미 있는 와인이라 같은 이름으로 맞췄어요.');
       if (!w.vintage) notes.push('빈티지가 안 보여서 비워 뒀어요.');
       setScanState({
         busy: false,
-        info: `사진에서 읽었어요. 맞는지 확인하고 등록을 눌러 주세요. ${notes.join(' ')}`.trim(),
+        info: `사진에서 읽었어요. 맞는지 확인하고 등록을 눌러 주세요. ${notes.join(' ')}${extra}`.trim(),
         warn: w.confidence !== 'high' || w.unsure ? `확실하지 않아요${w.unsure ? `: ${w.unsure}` : ''}` : '',
       });
     } catch (err) {
@@ -753,7 +774,7 @@ export default function App({ member }) {
       current_qty: r.qty,
       status: '정상',
       note,
-      custom_image: null,
+      custom_image: r.image || null,
     }));
     const { error } = await supabase.from('wines').insert(records);
     if (error) throw new Error('등록하지 못했어요: ' + error.message);
@@ -2263,7 +2284,7 @@ export default function App({ member }) {
               <button onClick={() => setShowAddModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleAddNewWine} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
-              <input ref={scanInputRef} type="file" accept="image/*" className="hidden" onChange={handleScanPhoto} />
+              <input ref={scanInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleScanPhoto} />
               <button
                 type="button"
                 disabled={scanState.busy}
@@ -2272,8 +2293,8 @@ export default function App({ member }) {
               >
                 <Camera className="w-5 h-5 shrink-0" />
                 <span className="min-w-0">
-                  <b className="block text-[13.5px]">{scanState.busy ? '사진 읽는 중… (5~15초)' : '사진으로 채우기'}</b>
-                  <span className="block text-[11.5px] text-sky-100">라벨을 찍으면 와인명 · 빈티지 · 원산지를 채워요. 목록 사진도 돼요.</span>
+                  <b className="block text-[13.5px]">{scanState.busy ? '사진 읽는 중… (5~30초)' : '사진으로 채우기'}</b>
+                  <span className="block text-[11.5px] text-sky-100">라벨 사진을 고르면 와인명 · 빈티지 · 원산지를 채워요. 앞면·뒷면이나 여러 병을 한 번에(최대 {MAX_SCAN_PHOTOS}장) 골라도 돼요. 목록 사진도 돼요.</span>
                 </span>
               </button>
               {scanState.info && <p className="rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs text-sky-100 leading-relaxed">{scanState.info}</p>}
@@ -2355,6 +2376,7 @@ export default function App({ member }) {
           racks={racksFor(floor)}
           defaultRack={floorRack(floor)}
           initialText={bulkPrefill?.text || ''}
+          images={bulkPrefill?.images || {}}
           notice={bulkPrefill?.notice || ''}
           onClose={() => { setShowBulkAdd(false); setBulkPrefill(null); }}
           onSubmit={async (args) => { await handleBulkAdd(args); setBulkPrefill(null); }}

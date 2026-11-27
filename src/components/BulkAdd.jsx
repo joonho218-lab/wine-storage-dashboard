@@ -28,7 +28,8 @@ export function parseBulk(text) {
   return { rows: out, errors };
 }
 
-export default function BulkAdd({ racks, defaultRack, onClose, onSubmit, initialText = '', notice = '' }) {
+// images: { '와인명__빈티지': 사진 dataURL } — 사진으로 읽은 와인은 사진도 함께 저장해요
+export default function BulkAdd({ racks, defaultRack, onClose, onSubmit, initialText = '', notice = '', images = {} }) {
   const [text, setText] = useState(initialText);
   const [rack, setRack] = useState(defaultRack);
   const [note, setNote] = useState('');
@@ -42,7 +43,7 @@ export default function BulkAdd({ racks, defaultRack, onClose, onSubmit, initial
     setBusy(true);
     setError('');
     try {
-      await onSubmit({ rows, rack, note: note.trim() });
+      await onSubmit({ rows: rows.map((r) => ({ ...r, image: images[`${r.name}__${r.vintage}`] || null })), rack, note: note.trim() });
     } catch (err) {
       setError(err.message || '등록하지 못했어요. 다시 시도해 주세요.');
       setBusy(false);
@@ -95,9 +96,14 @@ export default function BulkAdd({ racks, defaultRack, onClose, onSubmit, initial
                   {rows.map((r) => (
                     <tr key={`${r.name}__${r.vintage}`} className="border-t border-slate-800">
                       <td className="px-2.5 py-1.5 text-slate-100">
+                        <div className="flex items-center gap-2">
+                          {images[`${r.name}__${r.vintage}`] && <img src={images[`${r.name}__${r.vintage}`]} alt="" className="w-7 h-10 object-cover rounded border border-slate-700 shrink-0" />}
+                          <div className="min-w-0">
                         {r.name}
                         {r.englishName && <div className="text-[11px] italic font-serif text-slate-500">{r.englishName}</div>}
                         {r.mergedLines > 1 && <div className="text-[11px] text-amber-300">같은 줄 {r.mergedLines}개를 합쳤어요</div>}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-2 text-center text-gold tabular">{r.vintage}</td>
                       <td className="px-2 text-center tabular">{r.qty}</td>
