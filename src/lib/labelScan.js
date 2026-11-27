@@ -25,10 +25,21 @@ export function shrinkForScan(file, maxSide = 1568) {
   });
 }
 
-// 사진 → [{ name_ko, name_en, vintage, country, quantity, bottle, confidence, unsure }]
-export async function scanWinePhoto(file) {
-  const { base64, mediaType } = await shrinkForScan(file);
-  const { data, error } = await supabase.functions.invoke('wine-label-scan', { body: { image: base64, media_type: mediaType } });
+export const MAX_SCAN_PHOTOS = 10;
+
+// 사진 여러 장 → { kind, wines: [{ name_ko, name_en, vintage, country, quantity, bottle, confidence, unsure, photos, front_photo }] }
+// 같은 병의 앞면·뒷면은 하나로 묶여 와요. photos/front_photo는 1부터 세는 사진 번호예요.
+export async function scanWinePhotos(files) {
+  const list = Array.from(files || []).slice(0, MAX_SCAN_PHOTOS);
+  if (!list.length) throw new Error('사진을 고르지 않았어요.');
+  // 장 수가 많으면 조금 더 줄여서 보내요 (요청 크기 제한)
+  const side = list.length <= 2 ? 1568 : list.length <= 5 ? 1280 : 1024;
+  const images = [];
+  for (const f of list) {
+    const { base64, mediaType } = await shrinkForScan(f, side);
+    images.push({ data: base64, media_type: mediaType });
+  }
+  const { data, error } = await supabase.functions.invoke('wine-label-scan', { body: { images } });
   if (error) {
     let msg = '사진 인식에 실패했어요. 다시 시도해 주세요.';
     try { const body = await error.context?.json?.(); if (body?.error) msg = body.error; } catch { /* 기본 메시지 */ }

@@ -8,7 +8,9 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 const MODEL = 'claude-sonnet-5-5';
 const COUNTRIES = ['프랑스', '미국', '이탈리아', '스페인', '호주', '칠레', '포르투갈', '독일', '기타'];
-const MAX_IMAGE_B64 = 6_000_000; // 약 4.5MB 사진
+const MAX_IMAGE_B64 = 6_000_000; // 사진 한 장 약 4.5MB
+const MAX_TOTAL_B64 = 14_000_000; // 한 번에 보내는 사진 전체
+const MAX_PHOTOS = 10;
 
 const TOOL = {
   name: 'report_wines',
@@ -30,8 +32,10 @@ const TOOL = {
             bottle: { type: 'string', description: '750ml가 아니면 용량 (예: 1.5L 매그넘), 아니면 빈 문자열' },
             confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
             unsure: { type: 'string', description: '확실하지 않은 부분을 한국어로 짧게 (없으면 빈 문자열)' },
+            photos: { type: 'array', items: { type: 'integer' }, description: '이 와인을 읽은 사진 번호들 (1부터)' },
+            front_photo: { type: 'integer', description: '이 와인의 대표 사진 번호 (앞면 라벨이 보이는 사진, 1부터). 목록 사진이면 0' },
           },
-          required: ['name_ko', 'name_en', 'vintage', 'country', 'quantity', 'bottle', 'confidence', 'unsure'],
+          required: ['name_ko', 'name_en', 'vintage', 'country', 'quantity', 'bottle', 'confidence', 'unsure', 'photos', 'front_photo'],
         },
       },
     },
@@ -39,8 +43,12 @@ const TOOL = {
   },
 };
 
-const PROMPT = `와인 재고 대시보드에 등록하려고 찍은 사진이에요.
-- 병 라벨 사진이면 그 와인 한 병을 읽어 주세요. 빈티지는 라벨이나 목 부분 표기에서 찾아요.
+const PROMPT = `와인 재고 대시보드에 등록하려고 찍은 사진이에요 (사진마다 번호가 붙어 있어요).
+- 병 라벨 사진이면 와인을 읽어 주세요. 빈티지는 앞면 라벨이나 목 부분 표기에서 찾아요.
+- 사진이 여러 장이면 같은 병끼리 묶어 주세요. 같은 병의 앞면·뒷면은 와인 하나로 합치고,
+  뒷면 라벨(수입사 한글 표기, 용량, 원산지 등)의 정보도 함께 써 주세요. 앞면만 있어도 읽을 수 있는 만큼 읽어 주세요.
+- 같은 와인·같은 빈티지인데 서로 다른 병이 분명하면 quantity를 늘려 하나로 알려 주세요.
+  같은 병인지 다른 병인지 애매하면 같은 병(1병)으로 보고 unsure에 적어 주세요.
 - 여러 와인이 적힌 목록·표 사진이면 줄마다 읽어 주세요 (와인명, 연도, 수량).
 - 지어내지 마세요. 안 보이는 빈티지는 빈 문자열로 두고, 애매하면 confidence를 낮추고 unsure에 적어 주세요.
 - 한글명은 한국 수입사/와인샵에서 흔히 쓰는 표기로 (샤또, 도멘, 그랑 크뤼 등).`;
@@ -60,11 +68,23 @@ Deno.serve(async (req) => {
   const { data: member } = await admin.from('team_members').select('active, needs_password_change').eq('user_id', user.id).single();
   if (!member?.active || member.needs_password_change) return json({ error: '팀 계정만 사용할 수 있어요.' }, 403);
 
-  let body: { image?: unknown; media_type?: unknown };
+  let body: { image?: unknown; media_type?: unknown; images?: unknown };
   try { body = await req.json(); } catch { return json({ error: '사진을 읽지 못했어요.' }, 400); }
-  const image = typeof body.image === 'string' ? body.image : '';
-  const mediaType = ['image/jpeg', 'image/png', 'image/webp'].includes(String(body.media_type)) ? String(body.media_type) : 'image/jpeg';
-  if (!image || image.length > MAX_IMAGE_B64 || !/^[A-Za-z0-9+/=]+$/.test(image)) return json({ error: '사진이 너무 크거나 올바르지 않아요.' }, 400);
+  // 여러 장: images: [{ data, media_type }], 한 장(예전 방식): image, media_type
+  const raw = Array.isArray(body.images) ? body.images : [{ data: body.image, media_type: body.media_type }];
+  const photos = raw.map((p: { data?: unknown; media_type?: unknown }) => ({
+    data: typeof p?.data === 'string' ? p.data : '',
+    media_type: ['image/jpeg', 'image/png', 'image/webp'].includes(String(p?.media_type)) ? String(p.media_type) : 'image/jpeg',
+  }));
+  if (!photos.length || photos.length > MAX_PHOTOS) return json({ error: `사진은 한 번에 ${MAX_PHOTOS}장까지 올릴 수 있어요.` }, 400);
+  const total = photos.reduce((s: number, p: { data: string }) => s + p.data.length, 0);
+  if (total > MAX_TOTAL_B64 || photos.some((p: { data: string }) => !p.data || p.data.length > MAX_IMAGE_B64 || !/^[A-Za-z0-9+/=]+$/.test(p.data))) {
+    return json({ error: '사진이 너무 크거나 올바르지 않아요. 장 수를 줄여 다시 해 주세요.' }, 400);
+  }
+  const content = photos.flatMap((p: { data: string; media_type: string }, i: number) => [
+    { type: 'text', text: `사진 ${i + 1}` },
+    { type: 'image', source: { type: 'base64', media_type: p.media_type, data: p.data } },
+  ]);
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -74,10 +94,7 @@ Deno.serve(async (req) => {
       max_tokens: 8000, // 긴 목록 사진(수십 줄)도 끝까지 읽게
       tools: [TOOL],
       tool_choice: { type: 'tool', name: TOOL.name },
-      messages: [{ role: 'user', content: [
-        { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-        { type: 'text', text: PROMPT },
-      ] }],
+      messages: [{ role: 'user', content: [...content, { type: 'text', text: PROMPT }] }],
     }),
   });
   if (!res.ok) {
@@ -100,6 +117,8 @@ Deno.serve(async (req) => {
     bottle: String(w.bottle || '').slice(0, 40),
     confidence: ['high', 'medium', 'low'].includes(String(w.confidence)) ? String(w.confidence) : 'low',
     unsure: String(w.unsure || '').slice(0, 200),
+    photos: (Array.isArray(w.photos) ? w.photos : []).map((n: unknown) => Number(n)).filter((n: number) => Number.isInteger(n) && n >= 1 && n <= photos.length),
+    front_photo: Number.isInteger(Number(w.front_photo)) && Number(w.front_photo) >= 1 && Number(w.front_photo) <= photos.length ? Number(w.front_photo) : 0,
   })).filter((w: { name_ko: string; name_en: string }) => w.name_ko || w.name_en);
   return json({ kind: out.kind || 'unknown', wines });
 });
