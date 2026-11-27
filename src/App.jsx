@@ -15,6 +15,7 @@ import { GroupCards, GroupTable } from './components/WineList';
 import SyncReview from './components/SyncReview';
 import CheckPanel from './components/CheckPanel';
 import BulkAdd from './components/BulkAdd';
+import { scanWinePhoto, matchExisting } from './lib/labelScan';
 import { findIssues } from './lib/checks';
 import { prepareQuery, matchesQuery, searchKey } from './lib/search';
 import { downloadStyledExcel } from './lib/exportExcel';
@@ -366,6 +367,9 @@ export default function App({ member }) {
     try { const v = localStorage.getItem('wine.floor'); return FLOOR_IDS.includes(v) ? v : '2F'; } catch { return '2F'; }
   });
   const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [bulkPrefill, setBulkPrefill] = useState(null); // 사진 목록 인식 결과로 채운 붙여넣기 내용
+  const [scanState, setScanState] = useState({ busy: false, info: '', warn: '' });
+  const scanInputRef = useRef(null);
   const [historyLogs, setHistoryLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -426,6 +430,7 @@ export default function App({ member }) {
   // 와인 추가 창을 열 때 보관 위치 기본값을 지금 층에 맞춰요
   useEffect(() => {
     if (!showAddModal) return;
+    setScanState({ busy: false, info: '', warn: '' });
     setNewWineForm(f => ({
       ...f,
       rack: floor !== '2F' ? floorRack(floor) : (floorOf(f.rack) !== '2F' ? '1번랙' : f.rack),
@@ -675,14 +680,62 @@ export default function App({ member }) {
       current_qty: initialQty,
       status: '정상',
       note: newWineForm.note.trim(),
-      custom_image: null,
+      custom_image: newWineForm.image || null,
     };
 
     const { error: addError } = await supabase.from('wines').insert([newWineDb]);
     if (addError) { alert('등록하지 못했어요: ' + addError.message); return; }
 
-    setNewWineForm({ country: '프랑스', name: '', englishName: '', vintage: 'NV', rack: '1번랙', customRack: '', qty: 1, note: '' });
+    setNewWineForm({ country: '프랑스', name: '', englishName: '', vintage: 'NV', rack: '1번랙', customRack: '', qty: 1, note: '', image: null });
+    setScanState({ busy: false, info: '', warn: '' });
     setShowAddModal(false);
+  };
+
+  // 📷 사진으로 채우기: 라벨 사진이면 칸을 채우고, 목록 사진이면 '한 번에 등록'으로 넘겨요
+  const handleScanPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setScanState({ busy: true, info: '', warn: '' });
+    try {
+      const result = await scanWinePhoto(file);
+      const wines = result.wines || [];
+      if (!wines.length) { setScanState({ busy: false, info: '', warn: '사진에서 와인을 찾지 못했어요. 라벨이 잘 보이게 다시 찍어 주세요.' }); return; }
+      if (wines.length > 1 || result.kind === 'list') {
+        const lines = wines.map(w => {
+          const same = matchExisting(w, stockData);
+          return [same?.name || w.name_ko || w.name_en, w.vintage || 'NV', w.quantity || 1, same?.country || w.country, same?.englishName || w.name_en].join('\t');
+        });
+        const unsure = wines.filter(w => w.confidence !== 'high' || w.unsure).map(w => `${w.name_ko || w.name_en}${w.unsure ? ` (${w.unsure})` : ''}`);
+        setBulkPrefill({ text: lines.join('\n'), notice: `사진에서 ${wines.length}줄을 읽었어요. 등록 전에 이름·빈티지·수량을 확인해 주세요.${unsure.length ? ` 확인 필요: ${unsure.slice(0, 6).join(', ')}${unsure.length > 6 ? ' …' : ''}` : ''}` });
+        setScanState({ busy: false, info: '', warn: '' });
+        setShowBulkAdd(true);
+        return;
+      }
+      const w = wines[0];
+      const same = matchExisting(w, stockData);
+      let image = null;
+      try { image = await compressImageFile(file); } catch { /* 사진 저장은 건너뛰어도 등록은 돼요 */ }
+      setNewWineForm(f => ({
+        ...f,
+        name: same?.name || w.name_ko || w.name_en,
+        englishName: same?.englishName || w.name_en,
+        vintage: w.vintage || f.vintage || 'NV',
+        country: same?.country || w.country || f.country,
+        note: w.bottle && !f.note ? w.bottle : f.note,
+        image,
+      }));
+      const notes = [];
+      if (same) notes.push('이미 있는 와인이라 같은 이름으로 맞췄어요.');
+      if (!w.vintage) notes.push('빈티지가 안 보여서 비워 뒀어요.');
+      setScanState({
+        busy: false,
+        info: `사진에서 읽었어요. 맞는지 확인하고 등록을 눌러 주세요. ${notes.join(' ')}`.trim(),
+        warn: w.confidence !== 'high' || w.unsure ? `확실하지 않아요${w.unsure ? `: ${w.unsure}` : ''}` : '',
+      });
+    } catch (err) {
+      setScanState({ busy: false, info: '', warn: err.message || '사진 인식에 실패했어요.' });
+    }
   };
 
   // 여러 와인 한 번에 등록 (붙여넣기). 한 번에 넣어도 이력은 와인마다 내 이름으로 남아요.
@@ -2210,6 +2263,28 @@ export default function App({ member }) {
               <button onClick={() => setShowAddModal(false)} className="p-1 rounded-lg text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleAddNewWine} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto max-h-[75vh]">
+              <input ref={scanInputRef} type="file" accept="image/*" className="hidden" onChange={handleScanPhoto} />
+              <button
+                type="button"
+                disabled={scanState.busy}
+                onClick={() => scanInputRef.current?.click()}
+                className="w-full rounded-xl bg-sky-600 hover:bg-sky-500 disabled:opacity-60 px-3 py-3 text-left text-white flex items-center gap-3"
+              >
+                <Camera className="w-5 h-5 shrink-0" />
+                <span className="min-w-0">
+                  <b className="block text-[13.5px]">{scanState.busy ? '사진 읽는 중… (5~15초)' : '사진으로 채우기'}</b>
+                  <span className="block text-[11.5px] text-sky-100">라벨을 찍으면 와인명 · 빈티지 · 원산지를 채워요. 목록 사진도 돼요.</span>
+                </span>
+              </button>
+              {scanState.info && <p className="rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs text-sky-100 leading-relaxed">{scanState.info}</p>}
+              {scanState.warn && <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100 leading-relaxed">{scanState.warn}</p>}
+              {newWineForm.image && (
+                <div className="flex items-center gap-2.5 text-xs text-slate-400">
+                  <img src={newWineForm.image} alt="" className="w-10 h-14 object-cover rounded-md border border-slate-700" />
+                  이 사진이 와인 사진으로 함께 저장돼요.
+                  <button type="button" onClick={() => setNewWineForm(f => ({ ...f, image: null }))} className="ml-auto underline underline-offset-2 hover:text-white">빼기</button>
+                </div>
+              )}
               <button type="button" onClick={() => setShowBulkAdd(true)} className="w-full rounded-xl border border-dashed border-slate-600 px-3 py-2.5 text-left text-[12.5px] text-slate-300 hover:border-rose-400/60 hover:text-white">
                 <b className="text-slate-100">여러 와인 한 번에 등록</b> · 엑셀이나 목록을 복사해 붙여넣기 ›
               </button>
@@ -2279,8 +2354,10 @@ export default function App({ member }) {
         <BulkAdd
           racks={racksFor(floor)}
           defaultRack={floorRack(floor)}
-          onClose={() => setShowBulkAdd(false)}
-          onSubmit={handleBulkAdd}
+          initialText={bulkPrefill?.text || ''}
+          notice={bulkPrefill?.notice || ''}
+          onClose={() => { setShowBulkAdd(false); setBulkPrefill(null); }}
+          onSubmit={async (args) => { await handleBulkAdd(args); setBulkPrefill(null); }}
         />
       )}
 

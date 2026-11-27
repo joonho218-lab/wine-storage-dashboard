@@ -28,8 +28,8 @@ export function parseBulk(text) {
   return { rows: out, errors };
 }
 
-export default function BulkAdd({ racks, defaultRack, onClose, onSubmit }) {
-  const [text, setText] = useState('');
+export default function BulkAdd({ racks, defaultRack, onClose, onSubmit, initialText = '', notice = '' }) {
+  const [text, setText] = useState(initialText);
   const [rack, setRack] = useState(defaultRack);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,6 +60,7 @@ export default function BulkAdd({ racks, defaultRack, onClose, onSubmit }) {
           <button type="button" onClick={onClose} aria-label="닫기" className="p-1 rounded-lg text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {notice && <p className="rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs text-sky-100 leading-relaxed">{notice}</p>}
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
