@@ -73,7 +73,7 @@ function SectionHead({ title, rows, rack, selectedRack, onSelect }) {
   );
 }
 
-export default function SamdoMap({ stock, selectedRack, onSelect, onOpenRow }) {
+export default function SamdoMap({ stock, selectedRack, onSelect, onOpenRow, onBulkPhotos }) {
   const [onlyNoPhoto, setOnlyNoPhoto] = useState(false);
   // 휴대폰에서는 접어 두고, 구역 버튼을 눌러 펼쳐요
   const [openSet, setOpenSet] = useState(() => new Set(
@@ -218,6 +218,11 @@ export default function SamdoMap({ stock, selectedRack, onSelect, onOpenRow }) {
             <span key={k} className="flex items-center gap-1"><PhotoDot status={k} />{DOT_LABEL[k]}</span>
           ))}
         </span>
+        {onBulkPhotos && stock.some((r) => photoStatus(r) === 'taken') && (
+          <button type="button" onClick={onBulkPhotos} className="text-[11px] px-2 py-1 rounded-lg border border-amber-300/40 text-amber-200 hover:bg-amber-300/10">
+            노랑 점 와인에 사진 붙이기
+          </button>
+        )}
         <label className="ml-auto flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer">
           <input type="checkbox" checked={onlyNoPhoto} onChange={(e) => setOnlyNoPhoto(e.target.checked)} className="w-3.5 h-3.5 accent-rose-500" />
           사진 없는 와인만 진하게
