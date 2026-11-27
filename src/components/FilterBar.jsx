@@ -22,6 +22,9 @@ export default function FilterBar({
   onVintageTo,
   statusFilter,
   onStatus,
+  photoFilter = '전체',
+  onPhoto,
+  photoCounts,
   sortBy,
   onSort,
   selectedRack,
@@ -113,6 +116,20 @@ export default function FilterBar({
             </option>
           ))}
         </select>
+
+        {onPhoto && (
+          <select
+            aria-label="사진"
+            value={photoFilter}
+            onChange={(e) => onPhoto(e.target.value)}
+            className={`${selectChip} ${on(photoFilter !== '전체')}`}
+            style={{ backgroundImage: caret }}
+          >
+            <option value="전체">사진 전체</option>
+            <option value="있음">사진 있음{photoCounts ? ` (${photoCounts.있음}종)` : ''}</option>
+            <option value="없음">사진 없음{photoCounts ? ` (${photoCounts.없음}종)` : ''}</option>
+          </select>
+        )}
 
         {showSort && (
           <select
